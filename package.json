@@ -1,0 +1,29 @@
+{
+  "name": "extractor",
+  "version": "0.1.0",
+  "description": "Extract clean, AI-ready markdown from URLs",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "extractor": "src/index.ts"
+  },
+  "scripts": {
+    "extractor": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/turndown": "^5.0.6"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "linkedom": "^0.18.12",
+    "pdf-parse": "^2.4.5",
+    "turndown": "^7.2.4"
+  }
+}
