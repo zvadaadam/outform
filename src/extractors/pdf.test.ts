@@ -19,6 +19,12 @@ describe("extractPdf", () => {
     ).rejects.toThrow();
   });
 
+  test("throws friendly error for unresolvable hostname", async () => {
+    await expect(
+      extractPdf("https://this-domain-does-not-exist-zzz.invalid/doc.pdf")
+    ).rejects.toThrow(/Could not resolve hostname/);
+  });
+
   test("returns structured PdfResult", async () => {
     const result = await extractPdf(
       "https://arxiv.org/pdf/2301.00001v1.pdf"

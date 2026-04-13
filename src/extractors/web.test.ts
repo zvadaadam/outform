@@ -18,4 +18,16 @@ describe("extractWeb", () => {
       extractWeb("https://example.com/this-page-does-not-exist-at-all-404")
     ).rejects.toThrow();
   });
+
+  test("throws friendly error for unresolvable hostname", async () => {
+    await expect(
+      extractWeb("https://this-domain-does-not-exist-zzz.invalid/page")
+    ).rejects.toThrow(/Could not resolve hostname|Connection refused/);
+  });
+
+  test("throws friendly error for connection refused", async () => {
+    await expect(
+      extractWeb("http://localhost:1/page")
+    ).rejects.toThrow(/Connection refused|Could not resolve hostname/);
+  });
 });
