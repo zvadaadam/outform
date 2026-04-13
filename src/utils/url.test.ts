@@ -32,6 +32,24 @@ describe("detectUrlType", () => {
     ).toBe("youtube");
   });
 
+  test("detects mobile YouTube URLs (m.youtube.com)", () => {
+    expect(
+      detectUrlType("https://m.youtube.com/watch?v=dQw4w9WgXcQ"),
+    ).toBe("youtube");
+  });
+
+  test("detects YouTube Music URLs (music.youtube.com)", () => {
+    expect(
+      detectUrlType("https://music.youtube.com/watch?v=dQw4w9WgXcQ"),
+    ).toBe("youtube");
+  });
+
+  test("detects YouTube live URLs", () => {
+    expect(
+      detectUrlType("https://www.youtube.com/live/dQw4w9WgXcQ"),
+    ).toBe("youtube");
+  });
+
   test("detects PDF URLs", () => {
     expect(detectUrlType("https://arxiv.org/pdf/2301.00001.pdf")).toBe("pdf");
     expect(detectUrlType("https://example.com/doc.pdf?v=2")).toBe("pdf");
@@ -61,6 +79,24 @@ describe("extractYouTubeId", () => {
   test("extracts from embed URL", () => {
     expect(
       extractYouTubeId("https://www.youtube.com/embed/dQw4w9WgXcQ"),
+    ).toBe("dQw4w9WgXcQ");
+  });
+
+  test("extracts from mobile URL (m.youtube.com)", () => {
+    expect(
+      extractYouTubeId("https://m.youtube.com/watch?v=dQw4w9WgXcQ"),
+    ).toBe("dQw4w9WgXcQ");
+  });
+
+  test("extracts from music URL (music.youtube.com)", () => {
+    expect(
+      extractYouTubeId("https://music.youtube.com/watch?v=dQw4w9WgXcQ"),
+    ).toBe("dQw4w9WgXcQ");
+  });
+
+  test("extracts from live URL", () => {
+    expect(
+      extractYouTubeId("https://www.youtube.com/live/dQw4w9WgXcQ"),
     ).toBe("dQw4w9WgXcQ");
   });
 

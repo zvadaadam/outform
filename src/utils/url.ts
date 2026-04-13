@@ -1,10 +1,11 @@
 export type UrlType = "youtube" | "web" | "pdf";
 
 const YOUTUBE_PATTERNS = [
-  /^https?:\/\/(www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+  /^https?:\/\/(?:[a-z]+\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
   /^https?:\/\/youtu\.be\/([a-zA-Z0-9_-]{11})/,
-  /^https?:\/\/(www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
-  /^https?:\/\/(www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  /^https?:\/\/(?:[a-z]+\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+  /^https?:\/\/(?:[a-z]+\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  /^https?:\/\/(?:[a-z]+\.)?youtube\.com\/live\/([a-zA-Z0-9_-]{11})/,
 ];
 
 export function detectUrlType(url: string): UrlType {
@@ -19,7 +20,7 @@ export function extractYouTubeId(url: string): string | null {
   for (const pattern of YOUTUBE_PATTERNS) {
     const match = url.match(pattern);
     if (match) {
-      return match[2] ?? match[1] ?? null;
+      return match[1] ?? null;
     }
   }
   return null;
