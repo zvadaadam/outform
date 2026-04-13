@@ -1,6 +1,7 @@
 import { mkdir } from "fs/promises";
 import { extractDomain, hashString } from "../utils/url";
 import type { WebResult } from "../extractors/web";
+import type { PdfResult } from "../extractors/pdf";
 
 const OUTPUT_DIR = "/tmp/extractor";
 
@@ -59,6 +60,58 @@ export function getWebOutputPath(url: string): string {
   const domain = extractDomain(url);
   const hash = hashString(url);
   return `${OUTPUT_DIR}/web-${domain}-${hash}.md`;
+}
+
+export function formatPdfMarkdown(result: PdfResult): string {
+  const lines: string[] = [];
+
+  lines.push(`# ${result.title}`);
+  lines.push("");
+  lines.push(`**Source:** ${result.source}`);
+  lines.push(`**Pages:** ${result.pageCount}`);
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push("## Content");
+  lines.push("");
+  lines.push(result.content);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+export function formatPdfText(result: PdfResult): string {
+  const lines: string[] = [];
+
+  lines.push(result.title);
+  lines.push("=".repeat(result.title.length));
+  lines.push("");
+  lines.push(`Source: ${result.source}`);
+  lines.push(`Pages: ${result.pageCount}`);
+  lines.push("");
+  lines.push(result.content);
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+export function formatPdfJson(result: PdfResult): string {
+  return JSON.stringify(
+    {
+      type: "pdf",
+      title: result.title,
+      pageCount: result.pageCount,
+      source: result.source,
+      content: result.content,
+    },
+    null,
+    2
+  );
+}
+
+export function getPdfOutputPath(url: string): string {
+  const hash = hashString(url);
+  return `${OUTPUT_DIR}/pdf-${hash}.md`;
 }
 
 export async function writeOutput(

@@ -13,13 +13,15 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/pdf-parse": "^1.1.5"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
-    "linkedom": "^0.18.12"
+    "linkedom": "^0.18.12",
+    "pdf-parse": "^2.4.5"
   }
 }

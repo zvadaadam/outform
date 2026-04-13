@@ -3,11 +3,16 @@ import { detectUrlType, isValidUrl } from "./utils/url";
 import { checkDependencies } from "./utils/deps";
 import { log, logError, logSuccess } from "./utils/log";
 import { extractWeb } from "./extractors/web";
+import { extractPdf } from "./extractors/pdf";
 import {
   formatWebMarkdown,
   formatWebText,
   formatWebJson,
   getWebOutputPath,
+  formatPdfMarkdown,
+  formatPdfText,
+  formatPdfJson,
+  getPdfOutputPath,
   writeOutput,
 } from "./output/formatter";
 import { version } from "../package.json";
@@ -153,10 +158,31 @@ export async function run(args: string[]): Promise<void> {
         logError("YouTube extractor not yet implemented.");
         process.exit(1);
         break;
-      case "pdf":
-        logError("PDF extractor not yet implemented.");
-        process.exit(1);
+      case "pdf": {
+        const result = await extractPdf(url);
+
+        let formatted: string;
+        switch (options.format) {
+          case "txt":
+            formatted = formatPdfText(result);
+            break;
+          case "json":
+            formatted = formatPdfJson(result);
+            break;
+          default:
+            formatted = formatPdfMarkdown(result);
+        }
+
+        if (options.stdout) {
+          process.stdout.write(formatted);
+        } else {
+          const outputPath = getPdfOutputPath(url);
+          await writeOutput(outputPath, formatted);
+          logSuccess(`Saved to ${outputPath}`);
+          process.stdout.write(outputPath + "\n");
+        }
         break;
+      }
     }
   } catch (e: any) {
     logError(e.message);

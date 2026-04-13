@@ -4,8 +4,13 @@ import {
   formatWebText,
   formatWebJson,
   getWebOutputPath,
+  formatPdfMarkdown,
+  formatPdfText,
+  formatPdfJson,
+  getPdfOutputPath,
 } from "./formatter";
 import type { WebResult } from "../extractors/web";
+import type { PdfResult } from "../extractors/pdf";
 
 const sampleResult: WebResult = {
   title: "Test Article",
@@ -75,5 +80,67 @@ describe("getWebOutputPath", () => {
   test("strips www from domain", () => {
     const path = getWebOutputPath("https://www.example.com/article");
     expect(path).toMatch(/web-example\.com-/);
+  });
+});
+
+const samplePdfResult: PdfResult = {
+  title: "Research Paper on AI",
+  pageCount: 12,
+  source: "https://arxiv.org/pdf/2301.00001.pdf",
+  content: "This is the extracted PDF text content spanning multiple pages.",
+};
+
+describe("formatPdfMarkdown", () => {
+  test("includes title as h1", () => {
+    const md = formatPdfMarkdown(samplePdfResult);
+    expect(md).toContain("# Research Paper on AI");
+  });
+
+  test("includes source and page count", () => {
+    const md = formatPdfMarkdown(samplePdfResult);
+    expect(md).toContain("**Source:** https://arxiv.org/pdf/2301.00001.pdf");
+    expect(md).toContain("**Pages:** 12");
+  });
+
+  test("includes content under Content heading", () => {
+    const md = formatPdfMarkdown(samplePdfResult);
+    expect(md).toContain("## Content");
+    expect(md).toContain("extracted PDF text content");
+  });
+});
+
+describe("formatPdfText", () => {
+  test("uses plain text formatting", () => {
+    const txt = formatPdfText(samplePdfResult);
+    expect(txt).toContain("Research Paper on AI");
+    expect(txt).toContain("Source: https://arxiv.org/pdf/2301.00001.pdf");
+    expect(txt).toContain("Pages: 12");
+    expect(txt).not.toContain("**");
+    expect(txt).not.toContain("#");
+  });
+});
+
+describe("formatPdfJson", () => {
+  test("returns valid JSON with all fields", () => {
+    const json = formatPdfJson(samplePdfResult);
+    const parsed = JSON.parse(json);
+    expect(parsed.type).toBe("pdf");
+    expect(parsed.title).toBe("Research Paper on AI");
+    expect(parsed.pageCount).toBe(12);
+    expect(parsed.source).toBe("https://arxiv.org/pdf/2301.00001.pdf");
+    expect(parsed.content).toContain("extracted PDF text content");
+  });
+});
+
+describe("getPdfOutputPath", () => {
+  test("generates correct path pattern", () => {
+    const path = getPdfOutputPath("https://arxiv.org/pdf/2301.00001.pdf");
+    expect(path).toMatch(/^\/tmp\/extractor\/pdf-[a-f0-9]{8}\.md$/);
+  });
+
+  test("different URLs produce different hashes", () => {
+    const path1 = getPdfOutputPath("https://arxiv.org/pdf/2301.00001.pdf");
+    const path2 = getPdfOutputPath("https://arxiv.org/pdf/2301.00002.pdf");
+    expect(path1).not.toBe(path2);
   });
 });
