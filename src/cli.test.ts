@@ -224,6 +224,54 @@ describe("CLI output file extension matches format", () => {
   });
 });
 
+describe("CLI output quality validation", () => {
+  test("web markdown output contains no HTML noise", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--raw", "--stdout", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toMatch(/<script[\s>]/);
+    expect(stdout).not.toMatch(/<div[\s>]/);
+    expect(stdout).not.toMatch(/<span[\s>]/);
+    expect(stdout).not.toMatch(/<p[\s>]/);
+    expect(stdout).not.toMatch(/<a\s/);
+    expect(stdout).not.toContain("</div>");
+    expect(stdout).not.toContain("</p>");
+    expect(stdout).not.toContain("class=");
+    expect(stdout).not.toContain("style=");
+  });
+
+  test("PDF markdown output contains no HTML noise", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--raw", "--stdout", "https://arxiv.org/pdf/2301.00001.pdf"])
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toMatch(/<div[\s>]/);
+    expect(stdout).not.toMatch(/<span[\s>]/);
+    expect(stdout).not.toMatch(/<p[\s>]/);
+    expect(stdout).not.toContain("</div>");
+    expect(stdout).not.toContain("class=");
+  });
+
+  test("--raw flag skips AI summary in markdown output", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--raw", "--stdout", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("## Summary");
+    expect(stdout).toContain("## Content");
+  });
+
+  test("--raw flag produces null summary in JSON output", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--raw", "--stdout", "--format", "json", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.summary).toBeNull();
+  });
+});
+
 describe("CLI stdout/stderr separation", () => {
   test("progress goes to stderr, only file path goes to stdout", async () => {
     const { stdout, stderr, exitCode } = await collect(

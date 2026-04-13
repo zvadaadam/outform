@@ -1,7 +1,7 @@
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
-import { logProgress, logError } from "../utils/log";
+import { logProgress } from "../utils/log";
 
 export interface WebResult {
   title: string;
