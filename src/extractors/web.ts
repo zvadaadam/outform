@@ -2,6 +2,7 @@ import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { logProgress } from "../utils/log";
+import { spin } from "../utils/spinner";
 
 export interface WebResult {
   title: string;
@@ -13,7 +14,7 @@ export interface WebResult {
 }
 
 export async function extractWeb(url: string): Promise<WebResult> {
-  logProgress("Fetching page...");
+  const s = spin("Fetching page...");
 
   let response: Response;
   try {
@@ -27,16 +28,19 @@ export async function extractWeb(url: string): Promise<WebResult> {
       signal: AbortSignal.timeout(30_000),
     });
   } catch (e: any) {
+    s.stop("Fetch failed");
     throw new Error(friendlyFetchError(url, e));
   }
 
   if (!response.ok) {
+    s.stop("Fetch failed");
     throw new Error(
       `Failed to fetch ${url}: ${response.status} ${response.statusText}`
     );
   }
 
   const html = await response.text();
+  s.stop("Page fetched");
   logProgress("Parsing article content...");
 
   const { document } = parseHTML(html);

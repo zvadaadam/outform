@@ -1,4 +1,5 @@
 import { logProgress, logError } from "../utils/log";
+import { spin } from "../utils/spinner";
 import { extractYouTubeId } from "../utils/url";
 import { hasCommand } from "../utils/deps";
 import { stripVttTimestamps, parseChapters, type Chapter } from "../utils/vtt";
@@ -27,14 +28,16 @@ export async function extractYouTube(
 
   await ensureYtDlp();
 
-  logProgress("Fetching video metadata...");
+  let s = spin("Fetching video metadata...");
   const metadata = await fetchMetadata(url);
+  s.stop("Metadata fetched");
 
-  logProgress("Downloading captions...");
+  s = spin("Downloading captions...");
   let transcript = await fetchCaptions(url, videoId, lang);
+  s.stop(transcript ? "Captions downloaded" : "No captions found");
 
   if (!transcript) {
-    logProgress("No captions found, attempting audio transcription...");
+    logProgress("Attempting audio transcription fallback...");
     transcript = await whisperFallback(url, videoId);
   }
 
@@ -177,7 +180,7 @@ async function downloadAudio(
   url: string,
   workDir: string
 ): Promise<string | null> {
-  logProgress("Downloading audio for transcription...");
+  const s = spin("Downloading audio for transcription...");
   const proc = Bun.spawn(
     [
       "yt-dlp",
@@ -193,10 +196,12 @@ async function downloadAudio(
 
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
+    s.stop("Audio download failed");
     const stderr = await new Response(proc.stderr).text();
     logError(`Failed to download audio: ${stderr.trim() || "unknown error"}`);
     return null;
   }
+  s.stop("Audio downloaded");
 
   const files = await readdir(workDir);
   const wavFile = files.find((f) => f.endsWith(".wav"));
@@ -207,7 +212,7 @@ async function transcribeWithWhisper(
   audioPath: string,
   modelPath: string
 ): Promise<string | null> {
-  logProgress("Transcribing audio with whisper.cpp (this may take a while)...");
+  const s = spin("Transcribing audio with whisper.cpp...");
   const proc = Bun.spawn(
     ["whisper-cpp", "-m", modelPath, "-f", audioPath, "--no-timestamps"],
     { stdout: "pipe", stderr: "pipe" }
@@ -217,10 +222,12 @@ async function transcribeWithWhisper(
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
+    s.stop("Transcription failed");
     const stderr = await new Response(proc.stderr).text();
     logError(`whisper-cpp failed: ${stderr.trim() || "unknown error"}`);
     return null;
   }
+  s.stop("Audio transcribed");
 
   const text = output
     .split("\n")

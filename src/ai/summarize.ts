@@ -1,5 +1,6 @@
 import type { Provider } from "./provider";
-import { logProgress, logError } from "../utils/log";
+import { logError } from "../utils/log";
+import { spin } from "../utils/spinner";
 
 const SUMMARIZE_PROMPT =
   "Summarize the following text concisely. Capture the key points, main arguments, and conclusions. Output only the summary, no preamble.\n\n";
@@ -17,20 +18,28 @@ export async function summarize(
       ? content.slice(0, MAX_CONTENT_LENGTH) + "\n\n[Content truncated for summarization]"
       : content;
 
-  logProgress(`Summarizing with ${provider.name}...`);
+  const s = spin(`Summarizing with ${provider.name}...`);
 
   try {
+    let result: string;
     switch (provider.type) {
       case "claude-cli":
-        return await invokeClaude(truncated);
+        result = await invokeClaude(truncated);
+        break;
       case "codex-cli":
-        return await invokeCodex(truncated);
+        result = await invokeCodex(truncated);
+        break;
       case "anthropic-api":
-        return await invokeAnthropicApi(truncated);
+        result = await invokeAnthropicApi(truncated);
+        break;
       case "openai-api":
-        return await invokeOpenAiApi(truncated);
+        result = await invokeOpenAiApi(truncated);
+        break;
     }
+    s.stop("Summary generated");
+    return result;
   } catch (e: any) {
+    s.stop("Summarization failed");
     logError(`AI summarization failed: ${e.message}`);
     return null;
   }

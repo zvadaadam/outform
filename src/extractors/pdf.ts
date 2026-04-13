@@ -1,5 +1,6 @@
 import { PDFParse } from "pdf-parse";
 import { logProgress } from "../utils/log";
+import { spin } from "../utils/spinner";
 
 export interface PdfResult {
   title: string;
@@ -9,7 +10,7 @@ export interface PdfResult {
 }
 
 export async function extractPdf(url: string): Promise<PdfResult> {
-  logProgress("Downloading PDF...");
+  const s = spin("Downloading PDF...");
 
   let response: Response;
   try {
@@ -23,10 +24,12 @@ export async function extractPdf(url: string): Promise<PdfResult> {
       signal: AbortSignal.timeout(60_000),
     });
   } catch (e: any) {
+    s.stop("Download failed");
     throw new Error(friendlyFetchError(url, e));
   }
 
   if (!response.ok) {
+    s.stop("Download failed");
     throw new Error(
       `Failed to fetch PDF ${url}: ${response.status} ${response.statusText}`
     );
@@ -38,6 +41,7 @@ export async function extractPdf(url: string): Promise<PdfResult> {
     !contentType.includes("octet-stream") &&
     !url.toLowerCase().endsWith(".pdf")
   ) {
+    s.stop("Not a PDF");
     throw new Error(
       `URL does not appear to be a PDF. Content-Type: ${contentType}`
     );
@@ -45,9 +49,11 @@ export async function extractPdf(url: string): Promise<PdfResult> {
 
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength === 0) {
+    s.stop("Empty file");
     throw new Error("PDF file is empty.");
   }
 
+  s.stop("PDF downloaded");
   logProgress("Extracting text from PDF...");
 
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
