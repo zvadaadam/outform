@@ -1,7 +1,7 @@
 {
   "name": "extractor",
   "version": "0.1.0",
-  "description": "Extract clean, AI-ready markdown from URLs",
+  "description": "curl for AI-ready content from any URL",
   "module": "src/index.ts",
   "type": "module",
   "private": true,
@@ -10,6 +10,7 @@
   },
   "scripts": {
     "extractor": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "devDependencies": {
@@ -25,5 +26,8 @@
     "linkedom": "^0.18.12",
     "pdf-parse": "^2.4.5",
     "turndown": "^7.2.4"
+  },
+  "exports": {
+    ".": "./src/index.ts"
   }
 }

@@ -30,6 +30,14 @@ describe("friendlyFetchError", () => {
     expect(friendlyFetchError(url, e)).toContain("Connection refused");
   });
 
+  test("reserved .invalid hostnames are treated as DNS failures", () => {
+    const e = new Error("Unable to connect");
+    expect(
+      friendlyFetchError("https://this-domain-does-not-exist-zzz.invalid/doc.pdf", e),
+    ).toContain("Could not resolve hostname");
+  });
+
+
   test("ECONNREFUSED error", () => {
     const e = new Error("connect ECONNREFUSED 127.0.0.1:443");
     expect(friendlyFetchError(url, e)).toContain("Connection refused");

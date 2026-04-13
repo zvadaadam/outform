@@ -1,5 +1,5 @@
 import { PDFParse } from "pdf-parse";
-import { logProgress } from "../utils/log";
+import { logProgress, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
 import { friendlyFetchError } from "../utils/fetch-error";
 
@@ -10,8 +10,11 @@ export interface PdfResult {
   content: string;
 }
 
-export async function extractPdf(url: string): Promise<PdfResult> {
-  const s = spin("Downloading PDF...");
+export async function extractPdf(
+  url: string,
+  logger?: ExtractLogger,
+): Promise<PdfResult> {
+  const s = spin("Downloading PDF...", logger);
 
   let response: Response;
   try {
@@ -31,9 +34,7 @@ export async function extractPdf(url: string): Promise<PdfResult> {
 
   if (!response.ok) {
     s.stop("Download failed");
-    throw new Error(
-      `Failed to fetch PDF ${url}: ${response.status} ${response.statusText}`
-    );
+    throw new Error(`Failed to fetch PDF ${url}: ${response.status} ${response.statusText}`);
   }
 
   const contentType = response.headers.get("content-type") || "";
@@ -43,9 +44,7 @@ export async function extractPdf(url: string): Promise<PdfResult> {
     !url.toLowerCase().endsWith(".pdf")
   ) {
     s.stop("Not a PDF");
-    throw new Error(
-      `URL does not appear to be a PDF. Content-Type: ${contentType}`
-    );
+    throw new Error(`URL does not appear to be a PDF. Content-Type: ${contentType}`);
   }
 
   const buffer = await response.arrayBuffer();
@@ -55,7 +54,7 @@ export async function extractPdf(url: string): Promise<PdfResult> {
   }
 
   s.stop("PDF downloaded");
-  logProgress("Extracting text from PDF...");
+  logProgress("Extracting text from PDF...", logger);
 
   const parser = new PDFParse({ data: new Uint8Array(buffer) });
   const textResult = await parser.getText();
@@ -66,12 +65,11 @@ export async function extractPdf(url: string): Promise<PdfResult> {
 
   if (!content) {
     throw new Error(
-      "Could not extract text from PDF. The file may be scanned/image-based."
+      "Could not extract text from PDF. The file may be scanned/image-based.",
     );
   }
 
-  const title =
-    infoResult.info?.Title || filenameFromUrl(url) || "Untitled PDF";
+  const title = infoResult.info?.Title || filenameFromUrl(url) || "Untitled PDF";
 
   return {
     title,

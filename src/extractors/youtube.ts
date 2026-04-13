@@ -1,8 +1,9 @@
-import { logProgress, logError } from "../utils/log";
+import { logProgress, logError, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
 import { extractYouTubeId } from "../utils/url";
 import { hasCommand } from "../utils/deps";
 import { stripVttTimestamps, parseChapters, type Chapter } from "../utils/vtt";
+import { missingDependencyIssue, ExtractorError } from "../errors";
 import { tmpdir } from "os";
 import { join } from "path";
 import { readdir, readFile, rm } from "fs/promises";
@@ -19,26 +20,27 @@ export interface YouTubeResult {
 
 export async function extractYouTube(
   url: string,
-  lang: string = "en"
+  lang: string = "en",
+  logger?: ExtractLogger,
 ): Promise<YouTubeResult> {
   const videoId = extractYouTubeId(url);
   if (!videoId) {
     throw new Error(`Could not extract YouTube video ID from: ${url}`);
   }
 
-  await ensureYtDlp();
+  await ensureYtDlp(url);
 
-  let s = spin("Fetching video metadata...");
+  let s = spin("Fetching video metadata...", logger);
   const metadata = await fetchMetadata(url);
   s.stop("Metadata fetched");
 
-  s = spin("Downloading captions...");
+  s = spin("Downloading captions...", logger);
   let transcript = await fetchCaptions(url, videoId, lang);
   s.stop(transcript ? "Captions downloaded" : "No captions found");
 
   if (!transcript) {
-    logProgress("Attempting audio transcription fallback...");
-    transcript = await whisperFallback(url, videoId);
+    logProgress("Attempting audio transcription fallback...", logger);
+    transcript = await whisperFallback(url, videoId, logger);
   }
 
   if (!transcript) {
@@ -46,7 +48,7 @@ export async function extractYouTube(
       `No captions available for this video in language "${lang}". ` +
         `Try a different language with --lang, or the video may not have subtitles.\n` +
         `Install whisper.cpp to enable audio transcription fallback:\n` +
-        `  brew install whisper-cpp`
+        `  brew install whisper-cpp`,
     );
   }
 
@@ -63,7 +65,7 @@ export async function extractYouTube(
   };
 }
 
-async function ensureYtDlp(): Promise<void> {
+async function ensureYtDlp(url: string): Promise<void> {
   const proc = Bun.spawn(["which", "yt-dlp"], {
     stdout: "pipe",
     stderr: "pipe",
@@ -71,29 +73,36 @@ async function ensureYtDlp(): Promise<void> {
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
-    throw new Error(
-      "yt-dlp is not installed. Install it with:\n" +
-        "  brew install yt-dlp\n" +
-        "  # or: pip install yt-dlp\n" +
-        "  # or: https://github.com/yt-dlp/yt-dlp#installation"
+    throw new ExtractorError(
+      missingDependencyIssue({
+        url,
+        urlType: "youtube",
+        capability: "youtube",
+        dependency: "yt-dlp",
+        setupTarget: "youtube",
+        installHints: ["brew install yt-dlp", "pip install yt-dlp"],
+        message:
+          "yt-dlp is not installed. Install it with:\n" +
+          "  brew install yt-dlp\n" +
+          "  # or: pip install yt-dlp\n" +
+          "  # or: https://github.com/yt-dlp/yt-dlp#installation",
+      }),
     );
   }
 }
 
 async function fetchMetadata(url: string): Promise<Record<string, any>> {
-  const proc = Bun.spawn(
-    ["yt-dlp", "--dump-json", "--no-download", url],
-    { stdout: "pipe", stderr: "pipe" }
-  );
+  const proc = Bun.spawn(["yt-dlp", "--dump-json", "--no-download", url], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
 
   const output = await new Response(proc.stdout).text();
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text();
-    throw new Error(
-      `yt-dlp failed to fetch metadata: ${stderr.trim() || "unknown error"}`
-    );
+    throw new Error(`yt-dlp failed to fetch metadata: ${stderr.trim() || "unknown error"}`);
   }
 
   try {
@@ -106,7 +115,7 @@ async function fetchMetadata(url: string): Promise<Record<string, any>> {
 async function fetchCaptions(
   url: string,
   videoId: string,
-  lang: string
+  lang: string,
 ): Promise<string | null> {
   const workDir = join(tmpdir(), `extractor-yt-${videoId}`);
   await Bun.write(join(workDir, ".keep"), "");
@@ -127,13 +136,13 @@ async function fetchCaptions(
         join(workDir, "%(id)s"),
         url,
       ],
-      { stdout: "pipe", stderr: "pipe" }
+      { stdout: "pipe", stderr: "pipe" },
     );
 
     await proc.exited;
 
     const files = await readdir(workDir);
-    const vttFile = files.find((f) => f.endsWith(".vtt"));
+    const vttFile = files.find((file) => file.endsWith(".vtt"));
 
     if (!vttFile) return null;
 
@@ -146,11 +155,12 @@ async function fetchCaptions(
 
 async function whisperFallback(
   url: string,
-  videoId: string
+  videoId: string,
+  logger?: ExtractLogger,
 ): Promise<string | null> {
   const whisperAvailable = await hasCommand("whisper-cpp");
   if (!whisperAvailable) {
-    logError("whisper-cpp not found — cannot transcribe audio");
+    logError("whisper-cpp not found — cannot transcribe audio", logger);
     return null;
   }
 
@@ -158,7 +168,8 @@ async function whisperFallback(
   if (!model) {
     logError(
       "No whisper model found. Set WHISPER_MODEL env var or install a model:\n" +
-        "  brew install whisper-cpp && whisper-cpp --download-model base.en"
+        "  brew install whisper-cpp && whisper-cpp --download-model base.en",
+      logger,
     );
     return null;
   }
@@ -167,10 +178,10 @@ async function whisperFallback(
   await Bun.write(join(workDir, ".keep"), "");
 
   try {
-    const audioPath = await downloadAudio(url, workDir);
+    const audioPath = await downloadAudio(url, workDir, logger);
     if (!audioPath) return null;
 
-    return await transcribeWithWhisper(audioPath, model);
+    return await transcribeWithWhisper(audioPath, model, logger);
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
@@ -178,9 +189,10 @@ async function whisperFallback(
 
 async function downloadAudio(
   url: string,
-  workDir: string
+  workDir: string,
+  logger?: ExtractLogger,
 ): Promise<string | null> {
-  const s = spin("Downloading audio for transcription...");
+  const s = spin("Downloading audio for transcription...", logger);
   const proc = Bun.spawn(
     [
       "yt-dlp",
@@ -191,32 +203,33 @@ async function downloadAudio(
       join(workDir, "audio.%(ext)s"),
       url,
     ],
-    { stdout: "pipe", stderr: "pipe" }
+    { stdout: "pipe", stderr: "pipe" },
   );
 
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
     s.stop("Audio download failed");
     const stderr = await new Response(proc.stderr).text();
-    logError(`Failed to download audio: ${stderr.trim() || "unknown error"}`);
+    logError(`Failed to download audio: ${stderr.trim() || "unknown error"}`, logger);
     return null;
   }
   s.stop("Audio downloaded");
 
   const files = await readdir(workDir);
-  const wavFile = files.find((f) => f.endsWith(".wav"));
+  const wavFile = files.find((file) => file.endsWith(".wav"));
   return wavFile ? join(workDir, wavFile) : null;
 }
 
 async function transcribeWithWhisper(
   audioPath: string,
-  modelPath: string
+  modelPath: string,
+  logger?: ExtractLogger,
 ): Promise<string | null> {
-  const s = spin("Transcribing audio with whisper.cpp...");
-  const proc = Bun.spawn(
-    ["whisper-cpp", "-m", modelPath, "-f", audioPath, "--no-timestamps"],
-    { stdout: "pipe", stderr: "pipe" }
-  );
+  const s = spin("Transcribing audio with whisper.cpp...", logger);
+  const proc = Bun.spawn(["whisper-cpp", "-m", modelPath, "-f", audioPath, "--no-timestamps"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
 
   const output = await new Response(proc.stdout).text();
   const exitCode = await proc.exited;
@@ -224,15 +237,15 @@ async function transcribeWithWhisper(
   if (exitCode !== 0) {
     s.stop("Transcription failed");
     const stderr = await new Response(proc.stderr).text();
-    logError(`whisper-cpp failed: ${stderr.trim() || "unknown error"}`);
+    logError(`whisper-cpp failed: ${stderr.trim() || "unknown error"}`, logger);
     return null;
   }
   s.stop("Audio transcribed");
 
   const text = output
     .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
     .join("\n\n");
 
   return text || null;

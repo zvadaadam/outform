@@ -1,70 +1,207 @@
 import { parseArgs } from "util";
-import { detectUrlType, isValidUrl } from "./utils/url";
-import { checkDependencies } from "./utils/deps";
-import { log, logError, logProgress, logSuccess } from "./utils/log";
-import { extractWeb } from "./extractors/web";
-import { extractPdf } from "./extractors/pdf";
-import { extractYouTube } from "./extractors/youtube";
-import { extractYouTubeId } from "./utils/url";
 import {
-  formatWebMarkdown,
-  formatWebText,
-  formatWebJson,
-  getWebOutputPath,
-  formatPdfMarkdown,
-  formatPdfText,
-  formatPdfJson,
-  getPdfOutputPath,
-  formatYouTubeMarkdown,
-  formatYouTubeText,
-  formatYouTubeJson,
-  getYouTubeOutputPath,
-  writeOutput,
-} from "./output/formatter";
-import { detectProvider } from "./ai/provider";
-import { summarize } from "./ai/summarize";
+  render,
+  resolveUrlType,
+  extract,
+  type ExtractFormat,
+  type ExtractProvider,
+} from "./api";
+import {
+  checkDependencies,
+  getDoctorReport,
+} from "./utils/deps";
+import { createStderrLogger, log, logError, logSuccess } from "./utils/log";
+import { writeOutput } from "./output/formatter";
+import { isValidUrl } from "./utils/url";
+import {
+  formatSetupPlan,
+  getSetupPlan,
+  getSetupTargets,
+  isSetupTarget,
+  runSetup,
+} from "./setup";
+import { ExtractorError, unknownSetupTargetIssue } from "./errors";
 import { version } from "../package.json";
 
 const HELP = `
-extractor - Extract clean, AI-ready markdown from URLs
+extractor - curl for AI-ready content
+
+Give it a URL. Get back clean content for humans, scripts, and coding agents.
 
 Usage:
-  extractor <url>          Extract content from a URL
-  extractor --check        Check installed dependencies
-  extractor --help         Show this help message
+  extractor <url> [options]
+  extractor [options]      Read URL from stdin
+  extractor doctor [--json]
+  extractor setup <target> [--run]
+  extractor --check
+  extractor --help
 
-Arguments:
-  url                      YouTube video, web page, or PDF URL
+Default behavior:
+  Prints AI-ready Markdown to stdout.
+  Prints logs and progress to stderr.
+  Does not use AI unless you ask for it with --summarize.
+  Quote URLs that contain shell characters like ? or &.
 
 Options:
-  --raw                    Skip AI summarization, output raw text
-  --stdout                 Print content to stdout instead of file path
-  --format <md|txt|json>   Output format (default: md)
+  --json                   Output structured JSON
+  --text                   Output plain text
+  --summarize              Add an AI summary
+  --output <path>          Write result to a file instead of stdout
   --lang <code>            Caption language for YouTube (default: en)
-  --provider <name>        Force AI provider (claude|codex|none)
-  --check                  Verify installed dependencies
+  --provider <name>        AI provider for --summarize (claude|codex|none)
+  --format <md|txt|json>   Advanced format override
+  --run                    Execute an automatic setup plan
+  --check                  Alias for human-readable doctor output
   --version                Show version
   --help                   Show this help
 
-Output:
-  By default, writes to /tmp/extractor/ and prints the file path to stdout.
-  All progress and status messages go to stderr.
+Commands:
+  doctor                   Show dependency and capability status
+  setup                    Show or run setup for youtube|whisper|claude|codex
+
+Compatibility:
+  --raw                    Alias for default non-summarized output
+  --stdout                 Alias for default stdout output
 
 Examples:
-  extractor https://youtube.com/watch?v=dQw4w9WgXcQ
-  extractor https://paulgraham.com/superlinear.html
-  extractor https://arxiv.org/pdf/2301.00001.pdf
-  extractor --raw --stdout https://example.com
-  FILE=$(extractor https://example.com)
+  extractor 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
+  extractor --json 'https://example.com/article'
+  extractor --summarize 'https://example.com/article'
+  extractor doctor --json
+  extractor setup youtube
+  extractor setup youtube --run
+  printf '%s\n' 'https://example.com?a=1&b=2' | extractor
+`.trim();
+
+const SETUP_HELP = `
+extractor setup <target> [--run]
+
+Targets:
+  ${getSetupTargets().join("\n  ")}
+
+Examples:
+  extractor setup youtube
+  extractor setup youtube --run
 `.trim();
 
 export interface CliOptions {
   url: string;
-  raw: boolean;
-  stdout: boolean;
-  format: "md" | "txt" | "json";
+  summarize: boolean;
+  format: ExtractFormat;
   lang: string;
-  provider: string | undefined;
+  provider: ExtractProvider | undefined;
+  output: string | undefined;
+}
+
+async function readUrlFromStdin(): Promise<string | undefined> {
+  if (process.stdin.isTTY) {
+    return undefined;
+  }
+
+  let input = "";
+
+  for await (const chunk of process.stdin) {
+    input += chunk.toString();
+  }
+
+  const firstLine = input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  return firstLine || undefined;
+}
+
+function resolveFormat(values: Record<string, unknown>): ExtractFormat {
+  const json = values.json as boolean;
+  const text = values.text as boolean;
+  const format = values.format as string;
+
+  if (json && text) {
+    throw new Error("Choose only one of --json or --text.");
+  }
+
+  if (json) return "json";
+  if (text) return "txt";
+
+  if (!["md", "txt", "json"].includes(format)) {
+    throw new Error(`Invalid format: ${format}. Use md, txt, or json.`);
+  }
+
+  return format as ExtractFormat;
+}
+
+function resolveSummarize(values: Record<string, unknown>): boolean {
+  const raw = values.raw as boolean;
+  const summarizeRequested = values.summarize as boolean;
+
+  if (raw && summarizeRequested) {
+    throw new Error("Use either --summarize or --raw, not both.");
+  }
+
+  return summarizeRequested;
+}
+
+function resolveProvider(
+  values: Record<string, unknown>,
+  summarizeRequested: boolean,
+): ExtractProvider | undefined {
+  const provider = values.provider as string | undefined;
+
+  if (!provider) {
+    return undefined;
+  }
+
+  if (!["claude", "codex", "none"].includes(provider)) {
+    throw new Error(`Unknown provider "${provider}". Use: claude, codex, or none.`);
+  }
+
+  if (!summarizeRequested && provider !== "none") {
+    throw new Error("Use --provider together with --summarize.");
+  }
+
+  return provider as ExtractProvider;
+}
+
+async function emitOutput(content: string, outputPath?: string): Promise<void> {
+  if (!outputPath || outputPath === "-") {
+    process.stdout.write(content);
+    return;
+  }
+
+  await writeOutput(outputPath, content);
+  logSuccess(`Saved to ${outputPath}`);
+}
+
+async function runDoctor(jsonOutput: boolean): Promise<void> {
+  if (jsonOutput) {
+    const report = await getDoctorReport();
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    return;
+  }
+
+  await checkDependencies();
+}
+
+async function runSetupCommand(target: string | undefined, shouldRun: boolean): Promise<void> {
+  if (!target) {
+    process.stdout.write(SETUP_HELP + "\n");
+    return;
+  }
+
+  if (!isSetupTarget(target)) {
+    throw new ExtractorError(
+      unknownSetupTargetIssue(target, getSetupTargets()),
+    );
+  }
+
+  if (shouldRun) {
+    await runSetup(target);
+    return;
+  }
+
+  const plan = await getSetupPlan(target);
+  process.stdout.write(formatSetupPlan(plan) + "\n");
 }
 
 export async function run(args: string[]): Promise<void> {
@@ -75,9 +212,14 @@ export async function run(args: string[]): Promise<void> {
       options: {
         raw: { type: "boolean", default: false },
         stdout: { type: "boolean", default: false },
+        summarize: { type: "boolean", default: false },
+        json: { type: "boolean", default: false },
+        text: { type: "boolean", default: false },
+        output: { type: "string" },
         format: { type: "string", default: "md" },
         lang: { type: "string", default: "en" },
         provider: { type: "string" },
+        run: { type: "boolean", default: false },
         check: { type: "boolean", default: false },
         version: { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
@@ -90,6 +232,7 @@ export async function run(args: string[]): Promise<void> {
   }
 
   const { values, positionals } = parsed;
+  const command = positionals[0];
 
   if (values.help) {
     console.log(HELP);
@@ -101,14 +244,31 @@ export async function run(args: string[]): Promise<void> {
     return;
   }
 
-  if (values.check) {
-    await checkDependencies();
-    return;
+  try {
+    if (command === "doctor") {
+      await runDoctor(values.json as boolean);
+      return;
+    }
+
+    if (command === "setup") {
+      await runSetupCommand(positionals[1], values.run as boolean);
+      return;
+    }
+
+    if (values.check) {
+      await runDoctor(false);
+      return;
+    }
+  } catch (e: any) {
+    logError(e.message);
+    process.exit(1);
   }
 
-  const url = positionals[0];
+  const url = positionals[0] ?? (await readUrlFromStdin());
   if (!url) {
-    logError("No URL provided. Run `extractor --help` for usage.");
+    logError(
+      "No URL provided. Pass a quoted URL, or pipe one on stdin. Run `extractor --help` for usage.",
+    );
     process.exit(1);
   }
 
@@ -117,149 +277,41 @@ export async function run(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const format = values.format as "md" | "txt" | "json";
-  if (!["md", "txt", "json"].includes(format)) {
-    logError(`Invalid format: ${format}. Use md, txt, or json.`);
+  let format: ExtractFormat;
+  let summarizeRequested: boolean;
+  let provider: ExtractProvider | undefined;
+
+  try {
+    format = resolveFormat(values);
+    summarizeRequested = resolveSummarize(values);
+    provider = resolveProvider(values, summarizeRequested);
+  } catch (e: any) {
+    logError(e.message);
     process.exit(1);
   }
 
   const options: CliOptions = {
     url,
-    raw: values.raw as boolean,
-    stdout: values.stdout as boolean,
+    summarize: summarizeRequested,
     format,
     lang: values.lang as string,
-    provider: values.provider as string | undefined,
+    provider,
+    output: values.output as string | undefined,
   };
 
-  let urlType = detectUrlType(url);
-
-  // Content-Type fallback: detect PDFs served without .pdf extension
-  if (urlType === "web") {
-    const probeHeaders = {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    };
-    try {
-      // Try HEAD first, fall back to GET if HEAD fails (some servers reject HEAD)
-      let contentType: string | null = null;
-      try {
-        const headResp = await fetch(url, {
-          method: "HEAD",
-          headers: probeHeaders,
-          redirect: "follow",
-          signal: AbortSignal.timeout(5_000),
-        });
-        contentType = headResp.headers.get("content-type");
-      } catch {
-        const getResp = await fetch(url, {
-          method: "GET",
-          headers: probeHeaders,
-          redirect: "follow",
-          signal: AbortSignal.timeout(5_000),
-        });
-        contentType = getResp.headers.get("content-type");
-      }
-      if (contentType?.includes("application/pdf")) {
-        urlType = "pdf";
-      }
-    } catch {
-      // Both HEAD and GET failed, proceed with web extraction
-    }
-  }
-
-  log(`Detected type: ${urlType}`);
-
   try {
-    const provider = await detectProvider(options.provider, options.raw);
-    if (provider.type !== "none") {
-      logProgress(`AI provider: ${provider.name}`);
-    }
+    const urlType = await resolveUrlType(url);
+    log(`Detected type: ${urlType}`);
 
-    let content: string = "";
-    let formatted: string;
+    const result = await extract(url, {
+      summarize: options.summarize,
+      lang: options.lang,
+      provider: options.provider,
+      urlType,
+      logger: createStderrLogger(),
+    });
 
-    switch (urlType) {
-      case "web": {
-        const result = await extractWeb(url);
-        content = result.content;
-        const aiSummary = await summarize(content, provider);
-
-        switch (options.format) {
-          case "txt":
-            formatted = formatWebText(result, aiSummary);
-            break;
-          case "json":
-            formatted = formatWebJson(result, aiSummary);
-            break;
-          default:
-            formatted = formatWebMarkdown(result, aiSummary);
-        }
-
-        if (options.stdout) {
-          process.stdout.write(formatted);
-        } else {
-          const outputPath = getWebOutputPath(url, options.format);
-          await writeOutput(outputPath, formatted);
-          logSuccess(`Saved to ${outputPath}`);
-          process.stdout.write(outputPath + "\n");
-        }
-        break;
-      }
-      case "youtube": {
-        const result = await extractYouTube(url, options.lang);
-        content = result.transcript;
-        const aiSummary = await summarize(content, provider);
-
-        switch (options.format) {
-          case "txt":
-            formatted = formatYouTubeText(result, aiSummary);
-            break;
-          case "json":
-            formatted = formatYouTubeJson(result, aiSummary);
-            break;
-          default:
-            formatted = formatYouTubeMarkdown(result, aiSummary);
-        }
-
-        if (options.stdout) {
-          process.stdout.write(formatted);
-        } else {
-          const videoId = extractYouTubeId(url)!;
-          const outputPath = getYouTubeOutputPath(videoId, options.format);
-          await writeOutput(outputPath, formatted);
-          logSuccess(`Saved to ${outputPath}`);
-          process.stdout.write(outputPath + "\n");
-        }
-        break;
-      }
-      case "pdf": {
-        const result = await extractPdf(url);
-        content = result.content;
-        const aiSummary = await summarize(content, provider);
-
-        switch (options.format) {
-          case "txt":
-            formatted = formatPdfText(result, aiSummary);
-            break;
-          case "json":
-            formatted = formatPdfJson(result, aiSummary);
-            break;
-          default:
-            formatted = formatPdfMarkdown(result, aiSummary);
-        }
-
-        if (options.stdout) {
-          process.stdout.write(formatted);
-        } else {
-          const outputPath = getPdfOutputPath(url, options.format);
-          await writeOutput(outputPath, formatted);
-          logSuccess(`Saved to ${outputPath}`);
-          process.stdout.write(outputPath + "\n");
-        }
-        break;
-      }
-    }
+    await emitOutput(render(result, options.format), options.output);
   } catch (e: any) {
     logError(e.message);
     process.exit(1);
