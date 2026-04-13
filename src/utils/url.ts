@@ -19,7 +19,7 @@ export function extractYouTubeId(url: string): string | null {
   for (const pattern of YOUTUBE_PATTERNS) {
     const match = url.match(pattern);
     if (match) {
-      return match[2] ?? match[1];
+      return match[2] ?? match[1] ?? null;
     }
   }
   return null;
