@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { readFile, rm } from "fs/promises";
 
-const CLI = [process.execPath, "run", "src/index.ts"];
+const CLI = [process.execPath, "run", "src/bin.ts"];
 const NO_TOOLS_ENV = { PATH: "/tmp/extractor-no-tools" };
 
 function run(args: string[], envOverrides: Record<string, string | undefined> = {}) {
