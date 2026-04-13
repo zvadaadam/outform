@@ -1,0 +1,21 @@
+{
+  "name": "extractor",
+  "version": "0.1.0",
+  "description": "Extract clean, AI-ready markdown from URLs",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "extractor": "src/index.ts"
+  },
+  "scripts": {
+    "extractor": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
