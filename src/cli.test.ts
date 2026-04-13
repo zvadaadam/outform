@@ -98,6 +98,71 @@ describe("CLI error handling", () => {
   });
 });
 
+describe("CLI YouTube handling", () => {
+  test("YouTube URL without yt-dlp prints helpful install error", async () => {
+    const { stderr, exitCode } = await collect(
+      run(["--raw", "--stdout", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"])
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Detected type: youtube");
+    expect(stderr).toContain("yt-dlp");
+    expect(stderr).toContain("brew install");
+  });
+
+  test("--lang flag is accepted and passed to YouTube extractor", async () => {
+    const { stderr, exitCode } = await collect(
+      run(["--raw", "--stdout", "--lang", "es", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"])
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("yt-dlp");
+  });
+
+  test("--lang flag is silently ignored for non-YouTube URLs", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--raw", "--stdout", "--lang", "fr", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("# ");
+    expect(stdout.length).toBeGreaterThan(1000);
+  });
+});
+
+describe("CLI --provider none behaves like --raw", () => {
+  test("--provider none skips AI summary", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--provider", "none", "--stdout", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).not.toContain("## Summary");
+    expect(stdout).toContain("## Content");
+  });
+
+  test("--provider none produces null summary in JSON", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--provider", "none", "--stdout", "--format", "json", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(stdout);
+    expect(parsed.summary).toBeNull();
+  });
+});
+
+describe("CLI --help content", () => {
+  test("--help documents --lang flag with language code", async () => {
+    const { stdout, exitCode } = await collect(run(["--help"]));
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("--lang");
+    expect(stdout).toContain("Caption language");
+  });
+
+  test("--help shows all extraction examples", async () => {
+    const { stdout } = await collect(run(["--help"]));
+    expect(stdout).toContain("youtube.com");
+    expect(stdout).toContain("paulgraham.com");
+    expect(stdout).toContain("arxiv.org");
+  });
+});
+
 describe("CLI web extraction end-to-end", () => {
   test("--stdout --raw outputs markdown to stdout", async () => {
     const { stdout, stderr, exitCode } = await collect(
