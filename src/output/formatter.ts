@@ -58,7 +58,7 @@ export function formatWebText(
     lines.push("");
   }
 
-  lines.push(result.content);
+  lines.push(result.textContent);
   lines.push("");
 
   return lines.join("\n");

@@ -19,7 +19,8 @@ const sampleResult: WebResult = {
   title: "Test Article",
   author: "John Doe",
   source: "https://example.com/article",
-  content: "This is the article body with some text content.",
+  content: "This is the article body with **some** text content.",
+  textContent: "This is the article body with some text content.",
   excerpt: "A short excerpt.",
 };
 
@@ -49,11 +50,12 @@ describe("formatWebMarkdown", () => {
 });
 
 describe("formatWebText", () => {
-  test("uses plain text formatting", () => {
+  test("uses plain text formatting from textContent", () => {
     const txt = formatWebText(sampleResult);
     expect(txt).toContain("Test Article");
     expect(txt).toContain("Author: John Doe");
     expect(txt).toContain("Source: https://example.com/article");
+    expect(txt).toContain("This is the article body with some text content.");
     expect(txt).not.toContain("**");
     expect(txt).not.toContain("#");
   });
@@ -68,7 +70,7 @@ describe("formatWebJson", () => {
     expect(parsed.author).toBe("John Doe");
     expect(parsed.source).toBe("https://example.com/article");
     expect(parsed.content).toBe(
-      "This is the article body with some text content."
+      "This is the article body with **some** text content."
     );
     expect(parsed.excerpt).toBe("A short excerpt.");
   });

@@ -13,6 +13,24 @@ describe("extractWeb", () => {
     expect(result.content).not.toContain("<div");
   });
 
+  test("content is markdown with document structure preserved", async () => {
+    const result = await extractWeb("https://paulgraham.com/superlinear.html");
+
+    expect(result.content).toContain("[");
+    expect(result.content).not.toContain("<p>");
+    expect(result.content).not.toContain("<a ");
+    expect(result.content).not.toContain("<span");
+  });
+
+  test("textContent is plain text without markdown formatting", async () => {
+    const result = await extractWeb("https://paulgraham.com/superlinear.html");
+
+    expect(result.textContent).toBeTruthy();
+    expect(result.textContent.length).toBeGreaterThan(500);
+    expect(result.textContent).not.toContain("](");
+    expect(result.textContent).not.toContain("<div");
+  });
+
   test("throws on non-existent page", async () => {
     await expect(
       extractWeb("https://example.com/this-page-does-not-exist-at-all-404")
