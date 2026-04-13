@@ -136,23 +136,35 @@ export async function run(args: string[]): Promise<void> {
 
   // Content-Type fallback: detect PDFs served without .pdf extension
   if (urlType === "web") {
+    const probeHeaders = {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    };
     try {
-      const headResp = await fetch(url, {
-        method: "HEAD",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
-        redirect: "follow",
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (
-        headResp.headers.get("content-type")?.includes("application/pdf")
-      ) {
+      // Try HEAD first, fall back to GET if HEAD fails (some servers reject HEAD)
+      let contentType: string | null = null;
+      try {
+        const headResp = await fetch(url, {
+          method: "HEAD",
+          headers: probeHeaders,
+          redirect: "follow",
+          signal: AbortSignal.timeout(5_000),
+        });
+        contentType = headResp.headers.get("content-type");
+      } catch {
+        const getResp = await fetch(url, {
+          method: "GET",
+          headers: probeHeaders,
+          redirect: "follow",
+          signal: AbortSignal.timeout(5_000),
+        });
+        contentType = getResp.headers.get("content-type");
+      }
+      if (contentType?.includes("application/pdf")) {
         urlType = "pdf";
       }
     } catch {
-      // HEAD failed, proceed with web extraction
+      // Both HEAD and GET failed, proceed with web extraction
     }
   }
 

@@ -44,6 +44,26 @@ Something new.`;
     expect(result).toBe("Hello world.\n\nSomething new.");
   });
 
+  test("preserves non-adjacent repeated lines (e.g. song refrains)", () => {
+    const vtt = `WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Hello.
+
+00:00:02.000 --> 00:00:04.000
+Different line.
+
+00:00:04.000 --> 00:00:06.000
+Hello.`;
+
+    const result = stripVttTimestamps(vtt);
+    expect(result).toContain("Hello.");
+    expect(result).toContain("Different line.");
+    // The second "Hello." must NOT be dropped
+    const helloCount = result.split("Hello.").length - 1;
+    expect(helloCount).toBe(2);
+  });
+
   test("strips HTML-like cue tags", () => {
     const vtt = `WEBVTT
 

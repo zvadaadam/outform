@@ -26,12 +26,10 @@ export function stripVttTimestamps(input: string): string {
 }
 
 function deduplicateLines(lines: string[]): string {
-  const seen = new Set<string>();
   const unique: string[] = [];
 
   for (const line of lines) {
-    if (!seen.has(line)) {
-      seen.add(line);
+    if (unique.length === 0 || unique[unique.length - 1] !== line) {
       unique.push(line);
     }
   }

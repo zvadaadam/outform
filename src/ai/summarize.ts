@@ -9,13 +9,17 @@ const SUMMARIZE_PROMPT =
 const MAX_CONTENT_LENGTH = 100_000;
 const AI_TIMEOUT_MS = 60_000;
 
-async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  label: string,
+  proc?: { kill(): void }
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`${label} timed out after 60s`)),
-      AI_TIMEOUT_MS
-    );
+    timer = setTimeout(() => {
+      proc?.kill();
+      reject(new Error(`${label} timed out after 60s`));
+    }, AI_TIMEOUT_MS);
   });
   try {
     return await Promise.race([promise, timeout]);
@@ -69,7 +73,7 @@ async function invokeClaude(content: string): Promise<string> {
     stderr: "pipe",
   });
 
-  const result = await withTimeout(proc.exited, "claude CLI");
+  const result = await withTimeout(proc.exited, "claude CLI", proc);
   const output = await new Response(proc.stdout).text();
 
   if (result !== 0) {
@@ -94,7 +98,7 @@ async function invokeCodex(content: string): Promise<string> {
       }
     );
 
-    const exitCode = await withTimeout(proc.exited, "codex CLI");
+    const exitCode = await withTimeout(proc.exited, "codex CLI", proc);
 
     if (exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text();
