@@ -275,7 +275,7 @@ export async function inspect(
   const aiProviders = report.capabilities.aiSummary.providers ?? [];
   const aiCapability: InspectCapability & { requested: boolean } = {
     requested: summarizeRequested,
-    available: !summarizeRequested || report.capabilities.aiSummary.available,
+    available: report.capabilities.aiSummary.available,
     capability: "aiSummary",
     providers: aiProviders,
   };

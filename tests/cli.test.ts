@@ -1,13 +1,14 @@
 import { describe, test, expect } from "bun:test";
 import { readFile, rm } from "fs/promises";
 
-const CLI = ["bun", "run", "src/index.ts"];
+const CLI = [process.execPath, "run", "src/index.ts"];
+const NO_TOOLS_ENV = { PATH: "/tmp/extractor-no-tools" };
 
-function run(args: string[]) {
+function run(args: string[], envOverrides: Record<string, string | undefined> = {}) {
   return Bun.spawn([...CLI, ...args], {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, NO_COLOR: "1" },
+    env: { ...process.env, NO_COLOR: "1", ...envOverrides },
   });
 }
 
@@ -124,7 +125,7 @@ describe("CLI error handling", () => {
 describe("CLI YouTube handling", () => {
   test("YouTube URL without yt-dlp prints helpful install error", async () => {
     const { stderr, exitCode } = await collect(
-      run(["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]),
+      run(["https://www.youtube.com/watch?v=dQw4w9WgXcQ"], NO_TOOLS_ENV),
     );
     expect(exitCode).toBe(1);
     expect(stderr).toContain("Detected type: youtube");
@@ -134,7 +135,7 @@ describe("CLI YouTube handling", () => {
 
   test("--lang flag is accepted and passed to YouTube extractor", async () => {
     const { stderr, exitCode } = await collect(
-      run(["--lang", "es", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]),
+      run(["--lang", "es", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"], NO_TOOLS_ENV),
     );
     expect(exitCode).toBe(1);
     expect(stderr).toContain("yt-dlp");
@@ -410,7 +411,7 @@ describe("CLI doctor and setup", () => {
   });
 
   test("setup youtube prints a plan without changing the machine", async () => {
-    const { stdout, exitCode } = await collect(run(["setup", "youtube"]));
+    const { stdout, exitCode } = await collect(run(["setup", "youtube"], NO_TOOLS_ENV));
     expect(exitCode).toBe(0);
     expect(stdout).toContain("extractor setup youtube");
     expect(stdout).toContain("Enable YouTube extraction");
