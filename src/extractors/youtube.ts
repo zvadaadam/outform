@@ -4,6 +4,7 @@ import { extractYouTubeId } from "../utils/url";
 import { hasCommand } from "../utils/deps";
 import { stripVttTimestamps, parseChapters, type Chapter } from "../utils/vtt";
 import { missingDependencyIssue, ExtractorError } from "../errors";
+import { spawn, collectText, fileExists, writeWithDirs } from "../utils/process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { readdir, readFile, rm } from "fs/promises";
@@ -66,7 +67,7 @@ export async function extractYouTube(
 }
 
 async function ensureYtDlp(url: string): Promise<void> {
-  const proc = Bun.spawn(["which", "yt-dlp"], {
+  const proc = spawn(["which", "yt-dlp"], {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -92,16 +93,16 @@ async function ensureYtDlp(url: string): Promise<void> {
 }
 
 async function fetchMetadata(url: string): Promise<Record<string, any>> {
-  const proc = Bun.spawn(["yt-dlp", "--dump-json", "--no-download", url], {
+  const proc = spawn(["yt-dlp", "--dump-json", "--no-download", url], {
     stdout: "pipe",
     stderr: "pipe",
   });
 
-  const output = await new Response(proc.stdout).text();
+  const output = await collectText(proc.stdout);
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
+    const stderr = await collectText(proc.stderr);
     throw new Error(`yt-dlp failed to fetch metadata: ${stderr.trim() || "unknown error"}`);
   }
 
@@ -118,10 +119,10 @@ async function fetchCaptions(
   lang: string,
 ): Promise<string | null> {
   const workDir = join(tmpdir(), `extractor-yt-${videoId}`);
-  await Bun.write(join(workDir, ".keep"), "");
+  await writeWithDirs(join(workDir, ".keep"), "");
 
   try {
-    const proc = Bun.spawn(
+    const proc = spawn(
       [
         "yt-dlp",
         "--write-sub",
@@ -175,7 +176,7 @@ async function whisperFallback(
   }
 
   const workDir = join(tmpdir(), `extractor-whisper-${videoId}`);
-  await Bun.write(join(workDir, ".keep"), "");
+  await writeWithDirs(join(workDir, ".keep"), "");
 
   try {
     const audioPath = await downloadAudio(url, workDir, logger);
@@ -193,7 +194,7 @@ async function downloadAudio(
   logger?: ExtractLogger,
 ): Promise<string | null> {
   const s = spin("Downloading audio for transcription...", logger);
-  const proc = Bun.spawn(
+  const proc = spawn(
     [
       "yt-dlp",
       "--extract-audio",
@@ -209,7 +210,7 @@ async function downloadAudio(
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
     s.stop("Audio download failed");
-    const stderr = await new Response(proc.stderr).text();
+    const stderr = await collectText(proc.stderr);
     logError(`Failed to download audio: ${stderr.trim() || "unknown error"}`, logger);
     return null;
   }
@@ -226,17 +227,17 @@ async function transcribeWithWhisper(
   logger?: ExtractLogger,
 ): Promise<string | null> {
   const s = spin("Transcribing audio with whisper.cpp...", logger);
-  const proc = Bun.spawn(["whisper-cpp", "-m", modelPath, "-f", audioPath, "--no-timestamps"], {
+  const proc = spawn(["whisper-cpp", "-m", modelPath, "-f", audioPath, "--no-timestamps"], {
     stdout: "pipe",
     stderr: "pipe",
   });
 
-  const output = await new Response(proc.stdout).text();
+  const output = await collectText(proc.stdout);
   const exitCode = await proc.exited;
 
   if (exitCode !== 0) {
     s.stop("Transcription failed");
-    const stderr = await new Response(proc.stderr).text();
+    const stderr = await collectText(proc.stderr);
     logError(`whisper-cpp failed: ${stderr.trim() || "unknown error"}`, logger);
     return null;
   }
@@ -254,8 +255,7 @@ async function transcribeWithWhisper(
 export async function findWhisperModel(): Promise<string | null> {
   const envModel = process.env.WHISPER_MODEL;
   if (envModel) {
-    const file = Bun.file(envModel);
-    if (await file.exists()) return envModel;
+    if (await fileExists(envModel)) return envModel;
   }
 
   const home = process.env.HOME || "";
@@ -267,8 +267,7 @@ export async function findWhisperModel(): Promise<string | null> {
   ];
 
   for (const path of candidates) {
-    const file = Bun.file(path);
-    if (await file.exists()) return path;
+    if (await fileExists(path)) return path;
   }
 
   return null;

@@ -2,6 +2,7 @@ import { ExtractorError, setupFailedIssue } from "./errors";
 import type { SetupTarget } from "./utils/deps";
 import { hasCommand } from "./utils/deps";
 import { logProgress, logSuccess } from "./utils/log";
+import { spawn } from "./utils/process";
 
 interface SetupConfig {
   target: SetupTarget;
@@ -150,7 +151,7 @@ export async function runSetup(target: SetupTarget): Promise<void> {
 
   logProgress(`Running: ${plan.autoInstallCommand.join(" ")}`);
 
-  const proc = Bun.spawn(plan.autoInstallCommand, {
+  const proc = spawn(plan.autoInstallCommand, {
     stdout: "inherit",
     stderr: "inherit",
   });

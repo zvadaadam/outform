@@ -1,24 +1,36 @@
 {
-  "name": "extractor",
+  "name": "@anthropic-ai/extractor",
   "version": "0.1.0",
   "description": "curl for AI-ready content from any URL",
-  "module": "src/index.ts",
   "type": "module",
-  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "extractor": "src/index.ts"
+    "extractor": "dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
-    "extractor": "bun run src/index.ts",
+    "build": "tsup",
+    "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/node": "^20",
     "@types/pdf-parse": "^1.1.5",
-    "@types/turndown": "^5.0.6"
-  },
-  "peerDependencies": {
+    "@types/turndown": "^5.0.6",
+    "tsup": "^8",
     "typescript": "^5"
   },
   "dependencies": {
@@ -26,8 +38,5 @@
     "linkedom": "^0.18.12",
     "pdf-parse": "^2.4.5",
     "turndown": "^7.2.4"
-  },
-  "exports": {
-    ".": "./src/index.ts"
   }
 }

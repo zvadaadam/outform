@@ -1,3 +1,4 @@
+import { spawn } from "./process";
 import { log } from "./log";
 
 export type SetupTarget = "youtube" | "whisper" | "claude" | "codex";
@@ -106,7 +107,7 @@ const ENV_VARS: EnvVar[] = [
 
 async function which(cmd: string): Promise<boolean> {
   try {
-    const proc = Bun.spawn(["which", cmd], {
+    const proc = spawn(["which", cmd], {
       stdout: "pipe",
       stderr: "pipe",
     });

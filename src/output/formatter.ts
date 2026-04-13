@@ -1,5 +1,4 @@
-import { mkdir } from "fs/promises"
-import { dirname } from "path"
+import { writeWithDirs } from "../utils/process"
 import { extractDomain, hashString } from "../utils/url"
 import type { WebResult } from "../extractors/web"
 import type { PdfResult } from "../extractors/pdf"
@@ -330,6 +329,5 @@ export async function writeOutput(
   filePath: string,
   content: string
 ): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true })
-  await Bun.write(filePath, content)
+  await writeWithDirs(filePath, content)
 }

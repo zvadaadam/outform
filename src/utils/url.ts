@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type UrlType = "youtube" | "web" | "pdf";
 
 const YOUTUBE_PATTERNS = [
@@ -35,8 +37,7 @@ export function extractDomain(url: string): string {
 }
 
 export function hashString(input: string): string {
-  const hash = Bun.hash(input);
-  return hash.toString(16).slice(0, 8);
+  return createHash("sha256").update(input).digest("hex").slice(0, 8);
 }
 
 export function isValidUrl(input: string): boolean {

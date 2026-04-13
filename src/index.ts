@@ -1,5 +1,3 @@
-#!/usr/bin/env bun
-
 export * from "./api";
 export {
   probeEnvironment,
@@ -25,8 +23,3 @@ export {
   type ExtractorErrorCode,
   type ExtractorIssue,
 } from "./errors";
-
-if (import.meta.main) {
-  const { run } = await import("./cli");
-  await run(process.argv.slice(2));
-}

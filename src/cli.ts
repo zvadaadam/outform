@@ -21,7 +21,10 @@ import {
   runSetup,
 } from "./setup";
 import { ExtractorError, unknownSetupTargetIssue } from "./errors";
-import { version } from "../package.json";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json");
 
 const HELP = `
 extractor - curl for AI-ready content
