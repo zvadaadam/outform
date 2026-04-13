@@ -121,6 +121,16 @@ describe("YouTube output path", () => {
     const path = getYouTubeOutputPath("dQw4w9WgXcQ");
     expect(path).toBe("/tmp/extractor/yt-dQw4w9WgXcQ.md");
   });
+
+  test("uses .json extension for json format", () => {
+    const path = getYouTubeOutputPath("dQw4w9WgXcQ", "json");
+    expect(path).toBe("/tmp/extractor/yt-dQw4w9WgXcQ.json");
+  });
+
+  test("uses .txt extension for txt format", () => {
+    const path = getYouTubeOutputPath("dQw4w9WgXcQ", "txt");
+    expect(path).toBe("/tmp/extractor/yt-dQw4w9WgXcQ.txt");
+  });
 });
 
 describe("findWhisperModel", () => {

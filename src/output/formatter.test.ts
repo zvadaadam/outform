@@ -86,6 +86,16 @@ describe("getWebOutputPath", () => {
     const path = getWebOutputPath("https://www.example.com/article");
     expect(path).toMatch(/web-example\.com-/);
   });
+
+  test("uses .json extension for json format", () => {
+    const path = getWebOutputPath("https://example.com/article", "json");
+    expect(path).toMatch(/\.json$/);
+  });
+
+  test("uses .txt extension for txt format", () => {
+    const path = getWebOutputPath("https://example.com/article", "txt");
+    expect(path).toMatch(/\.txt$/);
+  });
 });
 
 const samplePdfResult: PdfResult = {
@@ -147,6 +157,16 @@ describe("getPdfOutputPath", () => {
     const path1 = getPdfOutputPath("https://arxiv.org/pdf/2301.00001.pdf");
     const path2 = getPdfOutputPath("https://arxiv.org/pdf/2301.00002.pdf");
     expect(path1).not.toBe(path2);
+  });
+
+  test("uses .json extension for json format", () => {
+    const path = getPdfOutputPath("https://arxiv.org/pdf/2301.00001.pdf", "json");
+    expect(path).toMatch(/\.json$/);
+  });
+
+  test("uses .txt extension for txt format", () => {
+    const path = getPdfOutputPath("https://arxiv.org/pdf/2301.00001.pdf", "txt");
+    expect(path).toMatch(/\.txt$/);
   });
 });
 

@@ -83,10 +83,11 @@ export function formatWebJson(
   );
 }
 
-export function getWebOutputPath(url: string): string {
+export function getWebOutputPath(url: string, format: string = "md"): string {
   const domain = extractDomain(url);
   const hash = hashString(url);
-  return `${OUTPUT_DIR}/web-${domain}-${hash}.md`;
+  const ext = format === "json" ? "json" : format === "txt" ? "txt" : "md";
+  return `${OUTPUT_DIR}/web-${domain}-${hash}.${ext}`;
 }
 
 export function formatPdfMarkdown(
@@ -161,9 +162,10 @@ export function formatPdfJson(
   );
 }
 
-export function getPdfOutputPath(url: string): string {
+export function getPdfOutputPath(url: string, format: string = "md"): string {
   const hash = hashString(url);
-  return `${OUTPUT_DIR}/pdf-${hash}.md`;
+  const ext = format === "json" ? "json" : format === "txt" ? "txt" : "md";
+  return `${OUTPUT_DIR}/pdf-${hash}.${ext}`;
 }
 
 export function formatYouTubeMarkdown(
@@ -278,8 +280,9 @@ export function formatYouTubeJson(
   );
 }
 
-export function getYouTubeOutputPath(videoId: string): string {
-  return `${OUTPUT_DIR}/yt-${videoId}.md`;
+export function getYouTubeOutputPath(videoId: string, format: string = "md"): string {
+  const ext = format === "json" ? "json" : format === "txt" ? "txt" : "md";
+  return `${OUTPUT_DIR}/yt-${videoId}.${ext}`;
 }
 
 export async function writeOutput(

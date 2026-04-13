@@ -197,6 +197,33 @@ describe("CLI Content-Type PDF detection", () => {
   });
 });
 
+describe("CLI output file extension matches format", () => {
+  test("--format json produces .json file", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--raw", "--format", "json", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    const filePath = stdout.trim();
+    expect(filePath).toMatch(/\.json$/);
+
+    const content = await readFile(filePath, "utf-8");
+    const parsed = JSON.parse(content);
+    expect(parsed.type).toBe("web");
+  });
+
+  test("--format txt produces .txt file", async () => {
+    const { stdout, exitCode } = await collect(
+      run(["--raw", "--format", "txt", "https://paulgraham.com/superlinear.html"])
+    );
+    expect(exitCode).toBe(0);
+    const filePath = stdout.trim();
+    expect(filePath).toMatch(/\.txt$/);
+
+    const content = await readFile(filePath, "utf-8");
+    expect(content).not.toContain("# ");
+  });
+});
+
 describe("CLI stdout/stderr separation", () => {
   test("progress goes to stderr, only file path goes to stdout", async () => {
     const { stdout, stderr, exitCode } = await collect(

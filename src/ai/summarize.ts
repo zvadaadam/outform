@@ -37,7 +37,8 @@ export async function summarize(
 }
 
 async function invokeClaude(content: string): Promise<string> {
-  const proc = Bun.spawn(["claude", "-p", SUMMARIZE_PROMPT + content], {
+  const proc = Bun.spawn(["claude", "-p", SUMMARIZE_PROMPT.trim()], {
+    stdin: new Response(content),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -54,7 +55,8 @@ async function invokeClaude(content: string): Promise<string> {
 }
 
 async function invokeCodex(content: string): Promise<string> {
-  const proc = Bun.spawn(["codex", "-q", SUMMARIZE_PROMPT + content], {
+  const proc = Bun.spawn(["codex", "-q", SUMMARIZE_PROMPT.trim()], {
+    stdin: new Response(content),
     stdout: "pipe",
     stderr: "pipe",
   });

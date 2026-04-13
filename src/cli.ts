@@ -187,7 +187,7 @@ export async function run(args: string[]): Promise<void> {
         if (options.stdout) {
           process.stdout.write(formatted);
         } else {
-          const outputPath = getWebOutputPath(url);
+          const outputPath = getWebOutputPath(url, options.format);
           await writeOutput(outputPath, formatted);
           logSuccess(`Saved to ${outputPath}`);
           process.stdout.write(outputPath + "\n");
@@ -214,7 +214,7 @@ export async function run(args: string[]): Promise<void> {
           process.stdout.write(formatted);
         } else {
           const videoId = extractYouTubeId(url)!;
-          const outputPath = getYouTubeOutputPath(videoId);
+          const outputPath = getYouTubeOutputPath(videoId, options.format);
           await writeOutput(outputPath, formatted);
           logSuccess(`Saved to ${outputPath}`);
           process.stdout.write(outputPath + "\n");
@@ -240,7 +240,7 @@ export async function run(args: string[]): Promise<void> {
         if (options.stdout) {
           process.stdout.write(formatted);
         } else {
-          const outputPath = getPdfOutputPath(url);
+          const outputPath = getPdfOutputPath(url, options.format);
           await writeOutput(outputPath, formatted);
           logSuccess(`Saved to ${outputPath}`);
           process.stdout.write(outputPath + "\n");
