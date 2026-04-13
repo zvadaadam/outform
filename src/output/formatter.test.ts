@@ -8,9 +8,12 @@ import {
   formatPdfText,
   formatPdfJson,
   getPdfOutputPath,
+  formatYouTubeMarkdown,
+  formatYouTubeJson,
 } from "./formatter";
 import type { WebResult } from "../extractors/web";
 import type { PdfResult } from "../extractors/pdf";
+import type { YouTubeResult } from "../extractors/youtube";
 
 const sampleResult: WebResult = {
   title: "Test Article",
@@ -142,5 +145,90 @@ describe("getPdfOutputPath", () => {
     const path1 = getPdfOutputPath("https://arxiv.org/pdf/2301.00001.pdf");
     const path2 = getPdfOutputPath("https://arxiv.org/pdf/2301.00002.pdf");
     expect(path1).not.toBe(path2);
+  });
+});
+
+describe("AI summary in formatters", () => {
+  const aiSummary = "This article discusses key themes and provides practical insights.";
+
+  test("web markdown includes summary section when provided", () => {
+    const md = formatWebMarkdown(sampleResult, aiSummary);
+    expect(md).toContain("## Summary");
+    expect(md).toContain(aiSummary);
+    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Content"));
+  });
+
+  test("web markdown omits summary when null", () => {
+    const md = formatWebMarkdown(sampleResult, null);
+    expect(md).not.toContain("## Summary");
+  });
+
+  test("web markdown omits summary when undefined", () => {
+    const md = formatWebMarkdown(sampleResult);
+    expect(md).not.toContain("## Summary");
+  });
+
+  test("web JSON includes summary field", () => {
+    const json = formatWebJson(sampleResult, aiSummary);
+    const parsed = JSON.parse(json);
+    expect(parsed.summary).toBe(aiSummary);
+  });
+
+  test("web JSON has null summary when not provided", () => {
+    const json = formatWebJson(sampleResult);
+    const parsed = JSON.parse(json);
+    expect(parsed.summary).toBeNull();
+  });
+
+  test("PDF markdown includes summary section when provided", () => {
+    const md = formatPdfMarkdown(samplePdfResult, aiSummary);
+    expect(md).toContain("## Summary");
+    expect(md).toContain(aiSummary);
+    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Content"));
+  });
+
+  test("PDF markdown omits summary when null", () => {
+    const md = formatPdfMarkdown(samplePdfResult, null);
+    expect(md).not.toContain("## Summary");
+  });
+
+  test("PDF JSON includes summary field", () => {
+    const json = formatPdfJson(samplePdfResult, aiSummary);
+    const parsed = JSON.parse(json);
+    expect(parsed.summary).toBe(aiSummary);
+  });
+
+  const sampleYouTubeResult: YouTubeResult = {
+    title: "Test Video",
+    channel: "Test Channel",
+    description: "A test video",
+    source: "https://youtube.com/watch?v=test123",
+    duration: 120,
+    chapters: null,
+    transcript: "Hello world, this is a test transcript.",
+  };
+
+  test("YouTube markdown includes summary before description", () => {
+    const md = formatYouTubeMarkdown(sampleYouTubeResult, aiSummary);
+    expect(md).toContain("## Summary");
+    expect(md).toContain(aiSummary);
+    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Description"));
+  });
+
+  test("YouTube markdown omits summary when null", () => {
+    const md = formatYouTubeMarkdown(sampleYouTubeResult, null);
+    expect(md).not.toContain("## Summary");
+  });
+
+  test("YouTube JSON includes summary field", () => {
+    const json = formatYouTubeJson(sampleYouTubeResult, aiSummary);
+    const parsed = JSON.parse(json);
+    expect(parsed.summary).toBe(aiSummary);
+  });
+
+  test("YouTube JSON has null summary when not provided", () => {
+    const json = formatYouTubeJson(sampleYouTubeResult);
+    const parsed = JSON.parse(json);
+    expect(parsed.summary).toBeNull();
   });
 });

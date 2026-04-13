@@ -7,7 +7,10 @@ import { formatTimestamp } from "../utils/vtt";
 
 const OUTPUT_DIR = "/tmp/extractor";
 
-export function formatWebMarkdown(result: WebResult): string {
+export function formatWebMarkdown(
+  result: WebResult,
+  aiSummary?: string | null
+): string {
   const lines: string[] = [];
 
   lines.push(`# ${result.title}`);
@@ -18,6 +21,14 @@ export function formatWebMarkdown(result: WebResult): string {
   }
   lines.push(`**Source:** ${result.source}`);
   lines.push("");
+
+  if (aiSummary) {
+    lines.push("## Summary");
+    lines.push("");
+    lines.push(aiSummary);
+    lines.push("");
+  }
+
   lines.push("---");
   lines.push("");
   lines.push("## Content");
@@ -28,7 +39,10 @@ export function formatWebMarkdown(result: WebResult): string {
   return lines.join("\n");
 }
 
-export function formatWebText(result: WebResult): string {
+export function formatWebText(
+  result: WebResult,
+  aiSummary?: string | null
+): string {
   const lines: string[] = [];
 
   lines.push(result.title);
@@ -37,13 +51,23 @@ export function formatWebText(result: WebResult): string {
   if (result.author) lines.push(`Author: ${result.author}`);
   lines.push(`Source: ${result.source}`);
   lines.push("");
+
+  if (aiSummary) {
+    lines.push("Summary:");
+    lines.push(aiSummary);
+    lines.push("");
+  }
+
   lines.push(result.content);
   lines.push("");
 
   return lines.join("\n");
 }
 
-export function formatWebJson(result: WebResult): string {
+export function formatWebJson(
+  result: WebResult,
+  aiSummary?: string | null
+): string {
   return JSON.stringify(
     {
       type: "web",
@@ -51,6 +75,7 @@ export function formatWebJson(result: WebResult): string {
       author: result.author,
       source: result.source,
       excerpt: result.excerpt,
+      summary: aiSummary || null,
       content: result.content,
     },
     null,
@@ -64,7 +89,10 @@ export function getWebOutputPath(url: string): string {
   return `${OUTPUT_DIR}/web-${domain}-${hash}.md`;
 }
 
-export function formatPdfMarkdown(result: PdfResult): string {
+export function formatPdfMarkdown(
+  result: PdfResult,
+  aiSummary?: string | null
+): string {
   const lines: string[] = [];
 
   lines.push(`# ${result.title}`);
@@ -72,6 +100,14 @@ export function formatPdfMarkdown(result: PdfResult): string {
   lines.push(`**Source:** ${result.source}`);
   lines.push(`**Pages:** ${result.pageCount}`);
   lines.push("");
+
+  if (aiSummary) {
+    lines.push("## Summary");
+    lines.push("");
+    lines.push(aiSummary);
+    lines.push("");
+  }
+
   lines.push("---");
   lines.push("");
   lines.push("## Content");
@@ -82,7 +118,10 @@ export function formatPdfMarkdown(result: PdfResult): string {
   return lines.join("\n");
 }
 
-export function formatPdfText(result: PdfResult): string {
+export function formatPdfText(
+  result: PdfResult,
+  aiSummary?: string | null
+): string {
   const lines: string[] = [];
 
   lines.push(result.title);
@@ -91,19 +130,30 @@ export function formatPdfText(result: PdfResult): string {
   lines.push(`Source: ${result.source}`);
   lines.push(`Pages: ${result.pageCount}`);
   lines.push("");
+
+  if (aiSummary) {
+    lines.push("Summary:");
+    lines.push(aiSummary);
+    lines.push("");
+  }
+
   lines.push(result.content);
   lines.push("");
 
   return lines.join("\n");
 }
 
-export function formatPdfJson(result: PdfResult): string {
+export function formatPdfJson(
+  result: PdfResult,
+  aiSummary?: string | null
+): string {
   return JSON.stringify(
     {
       type: "pdf",
       title: result.title,
       pageCount: result.pageCount,
       source: result.source,
+      summary: aiSummary || null,
       content: result.content,
     },
     null,
@@ -116,7 +166,10 @@ export function getPdfOutputPath(url: string): string {
   return `${OUTPUT_DIR}/pdf-${hash}.md`;
 }
 
-export function formatYouTubeMarkdown(result: YouTubeResult): string {
+export function formatYouTubeMarkdown(
+  result: YouTubeResult,
+  aiSummary?: string | null
+): string {
   const lines: string[] = [];
 
   lines.push(`# ${result.title}`);
@@ -127,6 +180,13 @@ export function formatYouTubeMarkdown(result: YouTubeResult): string {
     lines.push(`**Duration:** ${formatTimestamp(result.duration)}`);
   }
   lines.push("");
+
+  if (aiSummary) {
+    lines.push("## Summary");
+    lines.push("");
+    lines.push(aiSummary);
+    lines.push("");
+  }
 
   if (result.description) {
     lines.push("## Description");
@@ -154,7 +214,10 @@ export function formatYouTubeMarkdown(result: YouTubeResult): string {
   return lines.join("\n");
 }
 
-export function formatYouTubeText(result: YouTubeResult): string {
+export function formatYouTubeText(
+  result: YouTubeResult,
+  aiSummary?: string | null
+): string {
   const lines: string[] = [];
 
   lines.push(result.title);
@@ -166,6 +229,12 @@ export function formatYouTubeText(result: YouTubeResult): string {
     lines.push(`Duration: ${formatTimestamp(result.duration)}`);
   }
   lines.push("");
+
+  if (aiSummary) {
+    lines.push("Summary:");
+    lines.push(aiSummary);
+    lines.push("");
+  }
 
   if (result.description) {
     lines.push("Description:");
@@ -188,7 +257,10 @@ export function formatYouTubeText(result: YouTubeResult): string {
   return lines.join("\n");
 }
 
-export function formatYouTubeJson(result: YouTubeResult): string {
+export function formatYouTubeJson(
+  result: YouTubeResult,
+  aiSummary?: string | null
+): string {
   return JSON.stringify(
     {
       type: "youtube",
@@ -197,6 +269,7 @@ export function formatYouTubeJson(result: YouTubeResult): string {
       source: result.source,
       duration: result.duration,
       description: result.description,
+      summary: aiSummary || null,
       chapters: result.chapters,
       transcript: result.transcript,
     },

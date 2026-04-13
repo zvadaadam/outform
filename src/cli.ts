@@ -1,7 +1,7 @@
 import { parseArgs } from "util";
 import { detectUrlType, isValidUrl } from "./utils/url";
 import { checkDependencies } from "./utils/deps";
-import { log, logError, logSuccess } from "./utils/log";
+import { log, logError, logProgress, logSuccess } from "./utils/log";
 import { extractWeb } from "./extractors/web";
 import { extractPdf } from "./extractors/pdf";
 import { extractYouTube } from "./extractors/youtube";
@@ -21,6 +21,8 @@ import {
   getYouTubeOutputPath,
   writeOutput,
 } from "./output/formatter";
+import { detectProvider } from "./ai/provider";
+import { summarize } from "./ai/summarize";
 import { version } from "../package.json";
 
 const HELP = `
@@ -133,21 +135,30 @@ export async function run(args: string[]): Promise<void> {
   const urlType = detectUrlType(url);
   log(`Detected type: ${urlType}`);
 
+  const provider = await detectProvider(options.provider, options.raw);
+  if (provider.type !== "none") {
+    logProgress(`AI provider: ${provider.name}`);
+  }
+
   try {
+    let content: string = "";
+    let formatted: string;
+
     switch (urlType) {
       case "web": {
         const result = await extractWeb(url);
+        content = result.content;
+        const aiSummary = await summarize(content, provider);
 
-        let formatted: string;
         switch (options.format) {
           case "txt":
-            formatted = formatWebText(result);
+            formatted = formatWebText(result, aiSummary);
             break;
           case "json":
-            formatted = formatWebJson(result);
+            formatted = formatWebJson(result, aiSummary);
             break;
           default:
-            formatted = formatWebMarkdown(result);
+            formatted = formatWebMarkdown(result, aiSummary);
         }
 
         if (options.stdout) {
@@ -162,17 +173,18 @@ export async function run(args: string[]): Promise<void> {
       }
       case "youtube": {
         const result = await extractYouTube(url, options.lang);
+        content = result.transcript;
+        const aiSummary = await summarize(content, provider);
 
-        let formatted: string;
         switch (options.format) {
           case "txt":
-            formatted = formatYouTubeText(result);
+            formatted = formatYouTubeText(result, aiSummary);
             break;
           case "json":
-            formatted = formatYouTubeJson(result);
+            formatted = formatYouTubeJson(result, aiSummary);
             break;
           default:
-            formatted = formatYouTubeMarkdown(result);
+            formatted = formatYouTubeMarkdown(result, aiSummary);
         }
 
         if (options.stdout) {
@@ -188,17 +200,18 @@ export async function run(args: string[]): Promise<void> {
       }
       case "pdf": {
         const result = await extractPdf(url);
+        content = result.content;
+        const aiSummary = await summarize(content, provider);
 
-        let formatted: string;
         switch (options.format) {
           case "txt":
-            formatted = formatPdfText(result);
+            formatted = formatPdfText(result, aiSummary);
             break;
           case "json":
-            formatted = formatPdfJson(result);
+            formatted = formatPdfJson(result, aiSummary);
             break;
           default:
-            formatted = formatPdfMarkdown(result);
+            formatted = formatPdfMarkdown(result, aiSummary);
         }
 
         if (options.stdout) {
