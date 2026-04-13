@@ -1,3 +1,4 @@
+import { unlink } from "node:fs/promises";
 import type { Provider } from "./provider";
 import { logError } from "../utils/log";
 import { spin } from "../utils/spinner";
@@ -6,6 +7,22 @@ const SUMMARIZE_PROMPT =
   "Summarize the following text concisely. Capture the key points, main arguments, and conclusions. Output only the summary, no preamble.\n\n";
 
 const MAX_CONTENT_LENGTH = 100_000;
+const AI_TIMEOUT_MS = 60_000;
+
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after 60s`)),
+      AI_TIMEOUT_MS
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
 
 export async function summarize(
   content: string,
@@ -52,10 +69,10 @@ async function invokeClaude(content: string): Promise<string> {
     stderr: "pipe",
   });
 
+  const result = await withTimeout(proc.exited, "claude CLI");
   const output = await new Response(proc.stdout).text();
-  const exitCode = await proc.exited;
 
-  if (exitCode !== 0) {
+  if (result !== 0) {
     const stderr = await new Response(proc.stderr).text();
     throw new Error(`claude CLI failed: ${stderr.trim() || "unknown error"}`);
   }
@@ -64,21 +81,31 @@ async function invokeClaude(content: string): Promise<string> {
 }
 
 async function invokeCodex(content: string): Promise<string> {
-  const proc = Bun.spawn(["codex", "-q", SUMMARIZE_PROMPT.trim()], {
-    stdin: new Response(content),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const tmpOutput = `/tmp/extractor-codex-${Date.now()}.txt`;
+  const fullPrompt = SUMMARIZE_PROMPT.trim() + "\n\n" + content;
 
-  const output = await new Response(proc.stdout).text();
-  const exitCode = await proc.exited;
+  try {
+    const proc = Bun.spawn(
+      ["codex", "exec", "-", "--ephemeral", "--skip-git-repo-check", "-o", tmpOutput],
+      {
+        stdin: new Response(fullPrompt),
+        stdout: "pipe",
+        stderr: "pipe",
+      }
+    );
 
-  if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
-    throw new Error(`codex CLI failed: ${stderr.trim() || "unknown error"}`);
+    const exitCode = await withTimeout(proc.exited, "codex CLI");
+
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      throw new Error(`codex CLI failed: ${stderr.trim() || "unknown error"}`);
+    }
+
+    const output = await Bun.file(tmpOutput).text();
+    return output.trim();
+  } finally {
+    try { await unlink(tmpOutput); } catch {}
   }
-
-  return output.trim();
 }
 
 async function invokeAnthropicApi(content: string): Promise<string> {
@@ -102,6 +129,7 @@ async function invokeAnthropicApi(content: string): Promise<string> {
         },
       ],
     }),
+    signal: AbortSignal.timeout(AI_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -135,6 +163,7 @@ async function invokeOpenAiApi(content: string): Promise<string> {
         },
       ],
     }),
+    signal: AbortSignal.timeout(AI_TIMEOUT_MS),
   });
 
   if (!response.ok) {
