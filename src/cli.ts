@@ -1,7 +1,15 @@
 import { parseArgs } from "util";
 import { detectUrlType, isValidUrl } from "./utils/url";
 import { checkDependencies } from "./utils/deps";
-import { logError } from "./utils/log";
+import { log, logError, logSuccess } from "./utils/log";
+import { extractWeb } from "./extractors/web";
+import {
+  formatWebMarkdown,
+  formatWebText,
+  formatWebJson,
+  getWebOutputPath,
+  writeOutput,
+} from "./output/formatter";
 import { version } from "../package.json";
 
 const HELP = `
@@ -112,9 +120,46 @@ export async function run(args: string[]): Promise<void> {
   };
 
   const urlType = detectUrlType(url);
+  log(`Detected type: ${urlType}`);
 
-  // Stub: extractors will be implemented in subsequent iterations
-  logError(`Detected URL type: ${urlType}`);
-  logError("Extractors not yet implemented.");
-  process.exit(1);
+  try {
+    switch (urlType) {
+      case "web": {
+        const result = await extractWeb(url);
+
+        let formatted: string;
+        switch (options.format) {
+          case "txt":
+            formatted = formatWebText(result);
+            break;
+          case "json":
+            formatted = formatWebJson(result);
+            break;
+          default:
+            formatted = formatWebMarkdown(result);
+        }
+
+        if (options.stdout) {
+          process.stdout.write(formatted);
+        } else {
+          const outputPath = getWebOutputPath(url);
+          await writeOutput(outputPath, formatted);
+          logSuccess(`Saved to ${outputPath}`);
+          process.stdout.write(outputPath + "\n");
+        }
+        break;
+      }
+      case "youtube":
+        logError("YouTube extractor not yet implemented.");
+        process.exit(1);
+        break;
+      case "pdf":
+        logError("PDF extractor not yet implemented.");
+        process.exit(1);
+        break;
+    }
+  } catch (e: any) {
+    logError(e.message);
+    process.exit(1);
+  }
 }
