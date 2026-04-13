@@ -74,6 +74,15 @@ describe("CLI error handling", () => {
     expect(stderr).toContain("Invalid format");
     expect(stderr).toContain("xml");
   });
+
+  test("invalid provider prints error to stderr and exits 1", async () => {
+    const { stderr, exitCode } = await collect(
+      run(["--provider", "invalid", "https://example.com"])
+    );
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('Unknown provider "invalid"');
+    expect(stderr).toContain("claude, codex, or none");
+  });
 });
 
 describe("CLI web extraction end-to-end", () => {

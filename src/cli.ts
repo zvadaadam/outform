@@ -135,12 +135,12 @@ export async function run(args: string[]): Promise<void> {
   const urlType = detectUrlType(url);
   log(`Detected type: ${urlType}`);
 
-  const provider = await detectProvider(options.provider, options.raw);
-  if (provider.type !== "none") {
-    logProgress(`AI provider: ${provider.name}`);
-  }
-
   try {
+    const provider = await detectProvider(options.provider, options.raw);
+    if (provider.type !== "none") {
+      logProgress(`AI provider: ${provider.name}`);
+    }
+
     let content: string = "";
     let formatted: string;
 
