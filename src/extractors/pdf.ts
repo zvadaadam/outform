@@ -1,6 +1,7 @@
 import { PDFParse } from "pdf-parse";
 import { logProgress } from "../utils/log";
 import { spin } from "../utils/spinner";
+import { friendlyFetchError } from "../utils/fetch-error";
 
 export interface PdfResult {
   title: string;
@@ -25,7 +26,7 @@ export async function extractPdf(url: string): Promise<PdfResult> {
     });
   } catch (e: any) {
     s.stop("Download failed");
-    throw new Error(friendlyFetchError(url, e));
+    throw new Error(friendlyFetchError(url, e, "download PDF from"));
   }
 
   if (!response.ok) {
@@ -88,21 +89,4 @@ function filenameFromUrl(url: string): string {
   } catch {
     return "";
   }
-}
-
-function friendlyFetchError(url: string, e: Error): string {
-  const msg = e.message || "";
-  if (e.name === "TimeoutError" || msg.includes("abort")) {
-    return `Request to ${url} timed out after 60 seconds. The PDF may be very large or the server slow.`;
-  }
-  if (msg.includes("ENOTFOUND") || msg.includes("getaddrinfo") || msg.includes("typo in the url")) {
-    return `Could not resolve hostname for ${url}. Check the URL and your network connection.`;
-  }
-  if (msg.includes("ECONNREFUSED") || msg.includes("Unable to connect")) {
-    return `Connection refused by ${url}. The server may be down or the URL may be wrong.`;
-  }
-  if (msg.includes("CERT") || msg.includes("SSL") || msg.includes("TLS")) {
-    return `TLS/SSL error connecting to ${url}. The site may have certificate issues.`;
-  }
-  return `Failed to download PDF from ${url}: ${msg || "network error"}`;
 }

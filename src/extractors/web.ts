@@ -3,6 +3,7 @@ import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { logProgress } from "../utils/log";
 import { spin } from "../utils/spinner";
+import { friendlyFetchError } from "../utils/fetch-error";
 
 export interface WebResult {
   title: string;
@@ -29,7 +30,7 @@ export async function extractWeb(url: string): Promise<WebResult> {
     });
   } catch (e: any) {
     s.stop("Fetch failed");
-    throw new Error(friendlyFetchError(url, e));
+    throw new Error(friendlyFetchError(url, e, "fetch"));
   }
 
   if (!response.ok) {
@@ -68,21 +69,4 @@ export async function extractWeb(url: string): Promise<WebResult> {
     textContent: (article.textContent ?? "").trim(),
     excerpt: article.excerpt || null,
   };
-}
-
-function friendlyFetchError(url: string, e: Error): string {
-  const msg = e.message || "";
-  if (e.name === "TimeoutError" || msg.includes("abort")) {
-    return `Request to ${url} timed out after 30 seconds. Check your network connection or try again.`;
-  }
-  if (msg.includes("ENOTFOUND") || msg.includes("getaddrinfo") || msg.includes("typo in the url")) {
-    return `Could not resolve hostname for ${url}. Check the URL and your network connection.`;
-  }
-  if (msg.includes("ECONNREFUSED") || msg.includes("Unable to connect")) {
-    return `Connection refused by ${url}. The server may be down or the URL may be wrong.`;
-  }
-  if (msg.includes("CERT") || msg.includes("SSL") || msg.includes("TLS")) {
-    return `TLS/SSL error connecting to ${url}. The site may have certificate issues.`;
-  }
-  return `Failed to fetch ${url}: ${msg || "network error"}`;
 }
