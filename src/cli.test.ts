@@ -40,14 +40,27 @@ describe("CLI flags", () => {
     expect(stdout).toMatch(/^extractor v\d+\.\d+\.\d+\n$/);
   });
 
-  test("--check runs dependency check and exits 0", async () => {
+  test("--check prints status table with tools, env vars, and capabilities", async () => {
     const { stderr, exitCode } = await collect(run(["--check"]));
     expect(exitCode).toBe(0);
-    expect(stderr).toContain("Dependency check:");
+    expect(stderr).toContain("dependency check");
+    // Tools table
+    expect(stderr).toContain("Tools:");
     expect(stderr).toContain("yt-dlp");
     expect(stderr).toContain("whisper.cpp");
+    expect(stderr).toContain("claude CLI");
+    expect(stderr).toContain("codex CLI");
+    expect(stderr).toContain("brew install yt-dlp");
+    // Environment table
+    expect(stderr).toContain("Environment:");
     expect(stderr).toContain("ANTHROPIC_API_KEY");
     expect(stderr).toContain("OPENAI_API_KEY");
+    // Capabilities summary
+    expect(stderr).toContain("Capabilities:");
+    expect(stderr).toContain("Web page extraction");
+    expect(stderr).toContain("PDF extraction");
+    expect(stderr).toContain("YouTube extraction");
+    expect(stderr).toContain("AI summarization");
   });
 });
 

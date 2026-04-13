@@ -3,34 +3,53 @@ import { log } from "./log";
 interface Dependency {
   name: string;
   command: string;
-  required: boolean;
   installHint: string;
+  purpose: string;
 }
 
-const DEPENDENCIES: Dependency[] = [
+interface EnvVar {
+  name: string;
+  purpose: string;
+  hint: string;
+}
+
+const TOOLS: Dependency[] = [
   {
     name: "yt-dlp",
     command: "yt-dlp",
-    required: false,
     installHint: "brew install yt-dlp",
+    purpose: "YouTube extraction",
   },
   {
     name: "whisper.cpp",
     command: "whisper-cpp",
-    required: false,
     installHint: "brew install whisper-cpp",
+    purpose: "Audio transcription fallback",
   },
   {
     name: "claude CLI",
     command: "claude",
-    required: false,
-    installHint: "npm install -g @anthropic-ai/claude-code",
+    installHint: "npm i -g @anthropic-ai/claude-code",
+    purpose: "AI summarization",
   },
   {
     name: "codex CLI",
     command: "codex",
-    required: false,
-    installHint: "npm install -g @openai/codex",
+    installHint: "npm i -g @openai/codex",
+    purpose: "AI summarization",
+  },
+];
+
+const ENV_VARS: EnvVar[] = [
+  {
+    name: "ANTHROPIC_API_KEY",
+    purpose: "Direct Anthropic API",
+    hint: "export ANTHROPIC_API_KEY=sk-...",
+  },
+  {
+    name: "OPENAI_API_KEY",
+    purpose: "Direct OpenAI API",
+    hint: "export OPENAI_API_KEY=sk-...",
   },
 ];
 
@@ -48,27 +67,67 @@ async function which(cmd: string): Promise<boolean> {
 }
 
 export async function checkDependencies(): Promise<void> {
-  log("Dependency check:\n");
+  log("extractor — dependency check\n");
 
-  const maxName = Math.max(...DEPENDENCIES.map((d) => d.name.length));
-
-  for (const dep of DEPENDENCIES) {
-    const found = await which(dep.command);
-    const status = found ? "✓" : "✗";
-    const label = dep.name.padEnd(maxName + 2);
-    const hint = found ? "" : `  (install: ${dep.installHint})`;
-    log(`  ${status} ${label}${hint}`);
+  // Check tools
+  const toolResults: { dep: Dependency; found: boolean }[] = [];
+  for (const dep of TOOLS) {
+    toolResults.push({ dep, found: await which(dep.command) });
   }
 
-  const hasAnthropicKey = !!process.env.ANTHROPIC_API_KEY;
-  const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
+  // Check env vars
+  const envResults: { env: EnvVar; found: boolean }[] = [];
+  for (const env of ENV_VARS) {
+    envResults.push({ env, found: !!process.env[env.name] });
+  }
+
+  // Print tools table
+  const sc = 10;
+  log("  Tools:");
+  log(
+    `  ${"Status".padEnd(sc)} ${"Name".padEnd(14)} ${"Purpose".padEnd(28)} Install`,
+  );
+  log(`  ${"─".repeat(sc)} ${"─".repeat(14)} ${"─".repeat(28)} ${"─".repeat(36)}`);
+  for (const { dep, found } of toolResults) {
+    const status = found ? "✓ found" : "✗ missing";
+    log(
+      `  ${status.padEnd(sc)} ${dep.name.padEnd(14)} ${dep.purpose.padEnd(28)} ${dep.installHint}`,
+    );
+  }
+
+  // Print env vars table
+  log("");
+  log("  Environment:");
+  log(
+    `  ${"Status".padEnd(sc)} ${"Variable".padEnd(18)} ${"Purpose".padEnd(22)} Setup`,
+  );
+  log(`  ${"─".repeat(sc)} ${"─".repeat(18)} ${"─".repeat(22)} ${"─".repeat(30)}`);
+  for (const { env, found } of envResults) {
+    const status = found ? "✓ set" : "✗ unset";
+    log(
+      `  ${status.padEnd(sc)} ${env.name.padEnd(18)} ${env.purpose.padEnd(22)} ${env.hint}`,
+    );
+  }
+
+  // Print capability summary
+  const toolCount = toolResults.filter((r) => r.found).length;
+  const envCount = envResults.filter((r) => r.found).length;
+  const hasYtDlp = toolResults.find((r) => r.dep.command === "yt-dlp")?.found;
+  const hasAi = toolResults.some(
+    (r) => (r.dep.command === "claude" || r.dep.command === "codex") && r.found,
+  ) || envResults.some((r) => r.found);
 
   log("");
+  log(`  ${toolCount}/${TOOLS.length} tools, ${envCount}/${ENV_VARS.length} API keys configured`);
+  log("");
+  log("  Capabilities:");
+  log(`    ✓ Web page extraction     (built-in)`);
+  log(`    ✓ PDF extraction           (built-in)`);
   log(
-    `  ${hasAnthropicKey ? "✓" : "✗"} ANTHROPIC_API_KEY  ${hasAnthropicKey ? "" : " (set env var for direct API access)"}`,
+    `    ${hasYtDlp ? "✓" : "✗"} YouTube extraction       ${hasYtDlp ? "(ready)" : "(needs yt-dlp)"}`,
   );
   log(
-    `  ${hasOpenAIKey ? "✓" : "✗"} OPENAI_API_KEY    ${hasOpenAIKey ? "" : " (set env var for OpenAI access)"}`,
+    `    ${hasAi ? "✓" : "✗"} AI summarization         ${hasAi ? "(ready)" : "(needs AI provider)"}`,
   );
   log("");
 }
