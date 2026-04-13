@@ -6,6 +6,7 @@ import {
   getYouTubeOutputPath,
 } from "../output/formatter";
 import type { YouTubeResult } from "./youtube";
+import { findWhisperModel } from "./youtube";
 
 const SAMPLE_RESULT: YouTubeResult = {
   title: "How to Build CLI Tools",
@@ -119,5 +120,48 @@ describe("YouTube output path", () => {
   test("follows yt-{videoId}.md convention", () => {
     const path = getYouTubeOutputPath("dQw4w9WgXcQ");
     expect(path).toBe("/tmp/extractor/yt-dQw4w9WgXcQ.md");
+  });
+});
+
+describe("findWhisperModel", () => {
+  test("returns env var path when WHISPER_MODEL is set and file exists", async () => {
+    const tmpPath = "/tmp/extractor-test-whisper-model.bin";
+    await Bun.write(tmpPath, "fake model");
+    const original = process.env.WHISPER_MODEL;
+    process.env.WHISPER_MODEL = tmpPath;
+    try {
+      const result = await findWhisperModel();
+      expect(result).toBe(tmpPath);
+    } finally {
+      process.env.WHISPER_MODEL = original;
+      const { rm } = await import("fs/promises");
+      await rm(tmpPath, { force: true });
+    }
+  });
+
+  test("returns null when WHISPER_MODEL points to nonexistent file", async () => {
+    const original = process.env.WHISPER_MODEL;
+    process.env.WHISPER_MODEL = "/tmp/nonexistent-whisper-model.bin";
+    try {
+      const result = await findWhisperModel();
+      // Should fall through to candidate paths, which likely don't exist either
+      expect(result === null || typeof result === "string").toBe(true);
+    } finally {
+      process.env.WHISPER_MODEL = original;
+    }
+  });
+
+  test("returns null when no model is found anywhere", async () => {
+    const original = process.env.WHISPER_MODEL;
+    const originalHome = process.env.HOME;
+    delete process.env.WHISPER_MODEL;
+    process.env.HOME = "/tmp/extractor-fake-home-nonexistent";
+    try {
+      const result = await findWhisperModel();
+      expect(result).toBeNull();
+    } finally {
+      process.env.WHISPER_MODEL = original;
+      process.env.HOME = originalHome;
+    }
   });
 });

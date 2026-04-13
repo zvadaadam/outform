@@ -1,5 +1,6 @@
 import { logProgress, logError } from "../utils/log";
 import { extractYouTubeId } from "../utils/url";
+import { hasCommand } from "../utils/deps";
 import { stripVttTimestamps, parseChapters, type Chapter } from "../utils/vtt";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -30,12 +31,19 @@ export async function extractYouTube(
   const metadata = await fetchMetadata(url);
 
   logProgress("Downloading captions...");
-  const transcript = await fetchCaptions(url, videoId, lang);
+  let transcript = await fetchCaptions(url, videoId, lang);
+
+  if (!transcript) {
+    logProgress("No captions found, attempting audio transcription...");
+    transcript = await whisperFallback(url, videoId);
+  }
 
   if (!transcript) {
     throw new Error(
       `No captions available for this video in language "${lang}". ` +
-        `Try a different language with --lang, or the video may not have subtitles.`
+        `Try a different language with --lang, or the video may not have subtitles.\n` +
+        `Install whisper.cpp to enable audio transcription fallback:\n` +
+        `  brew install whisper-cpp`
     );
   }
 
@@ -131,4 +139,117 @@ async function fetchCaptions(
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+async function whisperFallback(
+  url: string,
+  videoId: string
+): Promise<string | null> {
+  const whisperAvailable = await hasCommand("whisper-cpp");
+  if (!whisperAvailable) {
+    logError("whisper-cpp not found — cannot transcribe audio");
+    return null;
+  }
+
+  const model = await findWhisperModel();
+  if (!model) {
+    logError(
+      "No whisper model found. Set WHISPER_MODEL env var or install a model:\n" +
+        "  brew install whisper-cpp && whisper-cpp --download-model base.en"
+    );
+    return null;
+  }
+
+  const workDir = join(tmpdir(), `extractor-whisper-${videoId}`);
+  await Bun.write(join(workDir, ".keep"), "");
+
+  try {
+    const audioPath = await downloadAudio(url, workDir);
+    if (!audioPath) return null;
+
+    return await transcribeWithWhisper(audioPath, model);
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function downloadAudio(
+  url: string,
+  workDir: string
+): Promise<string | null> {
+  logProgress("Downloading audio for transcription...");
+  const proc = Bun.spawn(
+    [
+      "yt-dlp",
+      "--extract-audio",
+      "--audio-format",
+      "wav",
+      "-o",
+      join(workDir, "audio.%(ext)s"),
+      url,
+    ],
+    { stdout: "pipe", stderr: "pipe" }
+  );
+
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    logError(`Failed to download audio: ${stderr.trim() || "unknown error"}`);
+    return null;
+  }
+
+  const files = await readdir(workDir);
+  const wavFile = files.find((f) => f.endsWith(".wav"));
+  return wavFile ? join(workDir, wavFile) : null;
+}
+
+async function transcribeWithWhisper(
+  audioPath: string,
+  modelPath: string
+): Promise<string | null> {
+  logProgress("Transcribing audio with whisper.cpp (this may take a while)...");
+  const proc = Bun.spawn(
+    ["whisper-cpp", "-m", modelPath, "-f", audioPath, "--no-timestamps"],
+    { stdout: "pipe", stderr: "pipe" }
+  );
+
+  const output = await new Response(proc.stdout).text();
+  const exitCode = await proc.exited;
+
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    logError(`whisper-cpp failed: ${stderr.trim() || "unknown error"}`);
+    return null;
+  }
+
+  const text = output
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .join("\n\n");
+
+  return text || null;
+}
+
+export async function findWhisperModel(): Promise<string | null> {
+  const envModel = process.env.WHISPER_MODEL;
+  if (envModel) {
+    const file = Bun.file(envModel);
+    if (await file.exists()) return envModel;
+  }
+
+  const home = process.env.HOME || "";
+  const candidates = [
+    "/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin",
+    "/usr/local/share/whisper-cpp/models/ggml-base.en.bin",
+    join(home, ".cache/whisper/ggml-base.en.bin"),
+    join(home, ".local/share/whisper-cpp/models/ggml-base.en.bin"),
+  ];
+
+  for (const path of candidates) {
+    const file = Bun.file(path);
+    if (await file.exists()) return path;
+  }
+
+  return null;
 }
