@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { spin } from "./spinner";
+import { spin } from "../../src/utils/spinner";
 
 describe("spinner", () => {
   test("spin() returns an object with stop and update methods", () => {

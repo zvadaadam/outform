@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { extractPdf } from "./pdf";
+import { extractPdf } from "../../src/extractors/pdf";
 
 describe("extractPdf", () => {
   test("extracts text from a real PDF (arxiv)", async () => {

@@ -10,10 +10,10 @@ import {
   getPdfOutputPath,
   formatYouTubeMarkdown,
   formatYouTubeJson,
-} from "./formatter";
-import type { WebResult } from "../extractors/web";
-import type { PdfResult } from "../extractors/pdf";
-import type { YouTubeResult } from "../extractors/youtube";
+} from "../../src/output/formatter";
+import type { WebResult } from "../../src/extractors/web";
+import type { PdfResult } from "../../src/extractors/pdf";
+import type { YouTubeResult } from "../../src/extractors/youtube";
 
 const sampleResult: WebResult = {
   title: "Test Article",

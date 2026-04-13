@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { extractWeb } from "./web";
+import { extractWeb } from "../../src/extractors/web";
 
 describe("extractWeb", () => {
   test("extracts article content from a real web page", async () => {

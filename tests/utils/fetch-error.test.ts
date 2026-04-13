@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { friendlyFetchError } from "./fetch-error";
+import { friendlyFetchError } from "../../src/utils/fetch-error";
 
 describe("friendlyFetchError", () => {
   const url = "https://example.com/page";

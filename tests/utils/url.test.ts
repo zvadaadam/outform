@@ -4,7 +4,7 @@ import {
   extractYouTubeId,
   extractDomain,
   isValidUrl,
-} from "./url";
+} from "../../src/utils/url";
 
 describe("detectUrlType", () => {
   test("detects standard YouTube URLs", () => {

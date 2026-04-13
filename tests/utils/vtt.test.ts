@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { stripVttTimestamps, parseChapters, formatTimestamp } from "./vtt";
+import { stripVttTimestamps, parseChapters, formatTimestamp } from "../../src/utils/vtt";
 
 describe("stripVttTimestamps", () => {
   test("strips VTT header and timestamps", () => {

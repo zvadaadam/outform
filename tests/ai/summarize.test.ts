@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
-import { summarize } from "./summarize";
-import type { Provider } from "./provider";
+import { summarize } from "../../src/ai/summarize";
+import type { Provider } from "../../src/ai/provider";
 
 describe("summarize", () => {
   test("returns null for none provider", async () => {

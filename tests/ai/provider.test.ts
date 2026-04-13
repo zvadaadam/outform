@@ -1,6 +1,6 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { detectProvider } from "./provider";
-import type { Provider } from "./provider";
+import { describe, test, expect, afterEach } from "bun:test";
+import { detectProvider } from "../../src/ai/provider";
+import type { Provider } from "../../src/ai/provider";
 
 describe("detectProvider", () => {
   const origEnv = { ...process.env };

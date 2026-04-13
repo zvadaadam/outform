@@ -4,9 +4,9 @@ import {
   formatYouTubeText,
   formatYouTubeJson,
   getYouTubeOutputPath,
-} from "../output/formatter";
-import type { YouTubeResult } from "./youtube";
-import { findWhisperModel } from "./youtube";
+} from "../../src/output/formatter";
+import type { YouTubeResult } from "../../src/extractors/youtube";
+import { findWhisperModel } from "../../src/extractors/youtube";
 
 const SAMPLE_RESULT: YouTubeResult = {
   title: "How to Build CLI Tools",
