@@ -180,6 +180,23 @@ describe("CLI PDF extraction end-to-end", () => {
   });
 });
 
+describe("CLI Content-Type PDF detection", () => {
+  test("URL serving PDF without .pdf extension is detected via Content-Type", async () => {
+    const { stdout, stderr, exitCode } = await collect(
+      run([
+        "--raw",
+        "--stdout",
+        "https://arxiv.org/pdf/2301.00001",
+      ])
+    );
+    expect(exitCode).toBe(0);
+    expect(stderr).toContain("Detected type: pdf");
+    expect(stdout).toContain("# ");
+    expect(stdout).toContain("Pages:");
+    expect(stdout.length).toBeGreaterThan(500);
+  });
+});
+
 describe("CLI stdout/stderr separation", () => {
   test("progress goes to stderr, only file path goes to stdout", async () => {
     const { stdout, stderr, exitCode } = await collect(

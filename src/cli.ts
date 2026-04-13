@@ -132,7 +132,30 @@ export async function run(args: string[]): Promise<void> {
     provider: values.provider as string | undefined,
   };
 
-  const urlType = detectUrlType(url);
+  let urlType = detectUrlType(url);
+
+  // Content-Type fallback: detect PDFs served without .pdf extension
+  if (urlType === "web") {
+    try {
+      const headResp = await fetch(url, {
+        method: "HEAD",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
+        redirect: "follow",
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (
+        headResp.headers.get("content-type")?.includes("application/pdf")
+      ) {
+        urlType = "pdf";
+      }
+    } catch {
+      // HEAD failed, proceed with web extraction
+    }
+  }
+
   log(`Detected type: ${urlType}`);
 
   try {
