@@ -4,6 +4,8 @@ import { checkDependencies } from "./utils/deps";
 import { log, logError, logSuccess } from "./utils/log";
 import { extractWeb } from "./extractors/web";
 import { extractPdf } from "./extractors/pdf";
+import { extractYouTube } from "./extractors/youtube";
+import { extractYouTubeId } from "./utils/url";
 import {
   formatWebMarkdown,
   formatWebText,
@@ -13,6 +15,10 @@ import {
   formatPdfText,
   formatPdfJson,
   getPdfOutputPath,
+  formatYouTubeMarkdown,
+  formatYouTubeText,
+  formatYouTubeJson,
+  getYouTubeOutputPath,
   writeOutput,
 } from "./output/formatter";
 import { version } from "../package.json";
@@ -154,10 +160,32 @@ export async function run(args: string[]): Promise<void> {
         }
         break;
       }
-      case "youtube":
-        logError("YouTube extractor not yet implemented.");
-        process.exit(1);
+      case "youtube": {
+        const result = await extractYouTube(url, options.lang);
+
+        let formatted: string;
+        switch (options.format) {
+          case "txt":
+            formatted = formatYouTubeText(result);
+            break;
+          case "json":
+            formatted = formatYouTubeJson(result);
+            break;
+          default:
+            formatted = formatYouTubeMarkdown(result);
+        }
+
+        if (options.stdout) {
+          process.stdout.write(formatted);
+        } else {
+          const videoId = extractYouTubeId(url)!;
+          const outputPath = getYouTubeOutputPath(videoId);
+          await writeOutput(outputPath, formatted);
+          logSuccess(`Saved to ${outputPath}`);
+          process.stdout.write(outputPath + "\n");
+        }
         break;
+      }
       case "pdf": {
         const result = await extractPdf(url);
 
