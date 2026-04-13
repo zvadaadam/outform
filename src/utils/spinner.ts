@@ -1,3 +1,5 @@
+import type { ExtractLogger } from "./log";
+
 const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 export interface Spinner {
@@ -5,8 +7,17 @@ export interface Spinner {
   update(message: string): void;
 }
 
-export function spin(message: string): Spinner {
-  if (!process.stderr.isTTY) {
+function noopSpinner(): Spinner {
+  return {
+    stop() {},
+    update() {},
+  };
+}
+
+export function spin(message: string, logger?: ExtractLogger): Spinner {
+  const activeLogger = logger;
+
+  if (!activeLogger) {
     process.stderr.write(`  → ${message}\n`);
     return {
       stop() {},
@@ -16,12 +27,26 @@ export function spin(message: string): Spinner {
     };
   }
 
+  if (!activeLogger.raw || !activeLogger.progress) {
+    return noopSpinner();
+  }
+
+  if (!activeLogger.isTTY) {
+    activeLogger.progress(message);
+    return {
+      stop() {},
+      update(msg: string) {
+        activeLogger.progress?.(msg);
+      },
+    };
+  }
+
   let current = message;
   let frameIndex = 0;
 
   const write = () => {
     const frame = frames[frameIndex % frames.length]!;
-    process.stderr.write(`\r  ${frame} ${current}`);
+    activeLogger.raw?.(`\r  ${frame} ${current}`);
     frameIndex++;
   };
 
@@ -32,7 +57,7 @@ export function spin(message: string): Spinner {
     stop(finalMessage?: string) {
       clearInterval(interval);
       const msg = finalMessage ?? current;
-      process.stderr.write(`\r  ✓ ${msg}\x1b[K\n`);
+      activeLogger.raw?.(`\r  ✓ ${msg}\x1b[K\n`);
     },
     update(msg: string) {
       current = msg;

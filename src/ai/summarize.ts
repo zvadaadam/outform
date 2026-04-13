@@ -1,6 +1,6 @@
 import { unlink } from "node:fs/promises";
 import type { Provider } from "./provider";
-import { logError } from "../utils/log";
+import { logError, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
 
 const SUMMARIZE_PROMPT =
@@ -12,7 +12,7 @@ const AI_TIMEOUT_MS = 60_000;
 async function withTimeout<T>(
   promise: Promise<T>,
   label: string,
-  proc?: { kill(): void }
+  proc?: { kill(): void },
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
@@ -30,7 +30,8 @@ async function withTimeout<T>(
 
 export async function summarize(
   content: string,
-  provider: Provider
+  provider: Provider,
+  logger?: ExtractLogger,
 ): Promise<string | null> {
   if (provider.type === "none") return null;
 
@@ -39,7 +40,7 @@ export async function summarize(
       ? content.slice(0, MAX_CONTENT_LENGTH) + "\n\n[Content truncated for summarization]"
       : content;
 
-  const s = spin(`Summarizing with ${provider.name}...`);
+  const s = spin(`Summarizing with ${provider.name}...`, logger);
 
   try {
     let result: string;
@@ -61,7 +62,7 @@ export async function summarize(
     return result;
   } catch (e: any) {
     s.stop("Summarization failed");
-    logError(`AI summarization failed: ${e.message}`);
+    logError(`AI summarization failed: ${e.message}`, logger);
     return null;
   }
 }
@@ -95,7 +96,7 @@ async function invokeCodex(content: string): Promise<string> {
         stdin: new Response(fullPrompt),
         stdout: "pipe",
         stderr: "pipe",
-      }
+      },
     );
 
     const exitCode = await withTimeout(proc.exited, "codex CLI", proc);
@@ -108,7 +109,9 @@ async function invokeCodex(content: string): Promise<string> {
     const output = await Bun.file(tmpOutput).text();
     return output.trim();
   } finally {
-    try { await unlink(tmpOutput); } catch {}
+    try {
+      await unlink(tmpOutput);
+    } catch {}
   }
 }
 

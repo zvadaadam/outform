@@ -1,7 +1,7 @@
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
-import { logProgress } from "../utils/log";
+import { logProgress, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
 import { friendlyFetchError } from "../utils/fetch-error";
 
@@ -14,8 +14,11 @@ export interface WebResult {
   excerpt: string | null;
 }
 
-export async function extractWeb(url: string): Promise<WebResult> {
-  const s = spin("Fetching page...");
+export async function extractWeb(
+  url: string,
+  logger?: ExtractLogger,
+): Promise<WebResult> {
+  const s = spin("Fetching page...", logger);
 
   let response: Response;
   try {
@@ -35,14 +38,12 @@ export async function extractWeb(url: string): Promise<WebResult> {
 
   if (!response.ok) {
     s.stop("Fetch failed");
-    throw new Error(
-      `Failed to fetch ${url}: ${response.status} ${response.statusText}`
-    );
+    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
   }
 
   const html = await response.text();
   s.stop("Page fetched");
-  logProgress("Parsing article content...");
+  logProgress("Parsing article content...", logger);
 
   const { document } = parseHTML(html);
   const reader = new Readability(document as any);
@@ -50,7 +51,7 @@ export async function extractWeb(url: string): Promise<WebResult> {
 
   if (!article || !article.content?.trim()) {
     throw new Error(
-      `Could not extract readable content from ${url}. The page may be JavaScript-rendered or require authentication.`
+      `Could not extract readable content from ${url}. The page may be JavaScript-rendered or require authentication.`,
     );
   }
 
