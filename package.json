@@ -1,7 +1,8 @@
 {
-  "name": "@anthropic-ai/extractor",
+  "name": "@zvadaadam/extractor",
   "version": "0.1.0",
   "description": "curl for AI-ready content from any URL",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -19,6 +20,14 @@
   ],
   "engines": {
     "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zvadaadam/extractor.git"
+  },
+  "homepage": "https://github.com/zvadaadam/extractor#readme",
+  "bugs": {
+    "url": "https://github.com/zvadaadam/extractor/issues"
   },
   "scripts": {
     "build": "tsup",

@@ -2,7 +2,7 @@ import { unlink, readFile } from "node:fs/promises";
 import type { Provider } from "./provider";
 import { logError, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
-import { spawn, collectText } from "../utils/process";
+import { spawn, waitForResult } from "../utils/process";
 
 const SUMMARIZE_PROMPT =
   "Summarize the following text concisely. Capture the key points, main arguments, and conclusions. Output only the summary, no preamble.\n\n";
@@ -75,15 +75,17 @@ async function invokeClaude(content: string): Promise<string> {
     stderr: "pipe",
   });
 
-  const result = await withTimeout(proc.exited, "claude CLI", proc);
-  const output = await collectText(proc.stdout);
+  const { exitCode, stdout, stderr } = await withTimeout(
+    waitForResult(proc),
+    "claude CLI",
+    proc,
+  );
 
-  if (result !== 0) {
-    const stderr = await collectText(proc.stderr);
+  if (exitCode !== 0) {
     throw new Error(`claude CLI failed: ${stderr.trim() || "unknown error"}`);
   }
 
-  return output.trim();
+  return stdout.trim();
 }
 
 async function invokeCodex(content: string): Promise<string> {
@@ -100,10 +102,13 @@ async function invokeCodex(content: string): Promise<string> {
       },
     );
 
-    const exitCode = await withTimeout(proc.exited, "codex CLI", proc);
+    const { exitCode, stderr } = await withTimeout(
+      waitForResult(proc),
+      "codex CLI",
+      proc,
+    );
 
     if (exitCode !== 0) {
-      const stderr = await collectText(proc.stderr);
       throw new Error(`codex CLI failed: ${stderr.trim() || "unknown error"}`);
     }
 

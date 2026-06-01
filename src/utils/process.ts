@@ -9,6 +9,12 @@ export interface Proc {
   kill(): void;
 }
 
+export interface ProcResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
 export function spawn(
   cmd: string[],
   opts?: {
@@ -49,6 +55,22 @@ export async function collectText(
     chunks.push(Buffer.from(chunk));
   }
   return Buffer.concat(chunks).toString("utf-8");
+}
+
+export async function waitForResult(proc: Proc): Promise<ProcResult> {
+  const stdoutPromise = collectText(proc.stdout);
+  const stderrPromise = collectText(proc.stderr);
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    stdoutPromise,
+    stderrPromise,
+  ]);
+
+  return {
+    stdout,
+    stderr,
+    exitCode,
+  };
 }
 
 export async function fileExists(path: string): Promise<boolean> {

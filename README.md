@@ -11,16 +11,16 @@ extractor 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
 
 ## Requirements
 
-Base requirement:
+Base runtime:
 
-- [Bun](https://bun.sh) to run the CLI
+- Node.js 18+
 
-Capability requirements:
+Optional external dependencies:
 
 | Capability | Works by default | Requires |
 |------------|------------------|----------|
-| Web page extraction | Yes | Bun |
-| PDF extraction | Yes | Bun |
+| Web page extraction | Yes | Node.js 18+ |
+| PDF extraction | Yes | Node.js 18+ |
 | YouTube extraction | No | `yt-dlp` |
 | Audio transcription fallback | No | `whisper.cpp` |
 | AI summaries | No | `claude`, `codex`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` |
@@ -32,19 +32,31 @@ extractor doctor
 extractor doctor --json
 ```
 
-Set up a missing capability explicitly:
+Install optional tools explicitly:
 
 ```bash
-extractor setup youtube
-extractor setup youtube --run
+extractor install youtube
+extractor install all
 ```
 
 ## Install
 
-Requires [Bun](https://bun.sh).
+Install the CLI globally with npm:
 
 ```bash
-bun install
+npm install -g @zvadaadam/extractor
+```
+
+Then verify what your machine can do:
+
+```bash
+extractor doctor
+```
+
+Install the SDK in another project with:
+
+```bash
+npm install @zvadaadam/extractor
 ```
 
 Capability-specific dependencies are not auto-installed:
@@ -56,7 +68,8 @@ Capability-specific dependencies are not auto-installed:
 | [claude](https://docs.anthropic.com/en/docs/claude-code) | AI summaries | `npm install -g @anthropic-ai/claude-code` |
 | [codex](https://github.com/openai/codex) | AI summaries | `npm install -g @openai/codex` |
 
-Run `extractor doctor` to see what is installed and what is missing. Use `extractor setup <target>` for explicit setup guidance.
+Run `extractor doctor` to see what is installed and what is missing.
+Use `extractor install all` to install every supported optional tool in one pass.
 
 ## CLI contract
 
@@ -77,8 +90,8 @@ extractor --summarize <url>
 extractor --output file.md <url>
 extractor doctor
 extractor doctor --json
-extractor setup youtube
-extractor setup youtube --run
+extractor install youtube
+extractor install all
 ```
 
 ### Examples
@@ -122,13 +135,7 @@ extractor doctor --json
 Show how to enable YouTube extraction:
 
 ```bash
-extractor setup youtube
-```
-
-Run the automatic setup plan when available:
-
-```bash
-extractor setup youtube --run
+extractor install youtube
 ```
 
 Pipe a URL on stdin:
@@ -153,7 +160,6 @@ extractor 'https://paulgraham.com/superlinear.html' > article.md
 --lang <code>            Caption language for YouTube (default: en)
 --provider <name>        AI provider for --summarize (claude|codex|none)
 --format md|txt|json     Advanced format override
---run                    Execute an automatic setup plan
 --check                  Alias for human-readable doctor output
 --version                Show version
 --help                   Show help
@@ -177,10 +183,10 @@ Compatibility aliases retained for older scripts:
 
 For agents and scripts, `extractor doctor --json` returns a structured JSON report that can be parsed programmatically.
 
-## Setup
+## Optional tools
 
-`extractor setup <target>` is explicit and safe by default.
-It shows how to install a missing dependency without silently mutating the machine.
+`extractor install <target>` installs a missing optional dependency.
+Use `extractor doctor` first if you want to inspect what is already available.
 
 Supported targets:
 
@@ -188,8 +194,10 @@ Supported targets:
 - `whisper`
 - `claude`
 - `codex`
+- `all`
 
-If an automatic installer is available, `extractor setup <target> --run` executes it explicitly.
+If an automatic installer is available, `extractor install <target>` executes it explicitly.
+`extractor install all` installs every supported optional tool.
 
 ## JS API
 
@@ -199,16 +207,16 @@ For SDK usage, the main flow is:
 - `inspect(url, options?)`
 - typed `ExtractorError` failures
 
-Use the same extraction engine directly from Bun or TypeScript:
+Use the same extraction engine directly from Node.js or TypeScript:
 
 ```ts
 import {
   extract,
   inspect,
   probeEnvironment,
-  getSetupPlan,
+  getInstallPlan,
   ExtractorError,
-} from "extractor";
+} from "@zvadaadam/extractor";
 
 const inspection = await inspect(
   "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s",
@@ -234,7 +242,7 @@ try {
 }
 
 const environment = await probeEnvironment();
-const setup = await getSetupPlan("youtube");
+const installPlan = await getInstallPlan("youtube");
 ```
 
 `extract(url, options?)` returns a small, agent-friendly object:
@@ -265,7 +273,7 @@ type ExtractOptions = {
 By default, the SDK is quiet. If you want CLI-style progress output, pass a logger:
 
 ```ts
-import { extract, createStderrLogger } from "extractor";
+import { extract, createStderrLogger } from "@zvadaadam/extractor";
 
 const result = await extract("https://example.com", {
   logger: createStderrLogger(),
@@ -299,8 +307,10 @@ If you request `--summarize` and no provider is available, extractor exits with 
 ## Development
 
 ```bash
-bun run extractor 'https://example.com/article'
+bun install
+bun run src/bin.ts 'https://example.com/article'
 bun test
+npm run build
 ```
 
 ## License

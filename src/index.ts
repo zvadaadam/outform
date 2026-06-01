@@ -6,10 +6,23 @@ export {
   type DoctorReport,
 } from "./utils/deps";
 export {
+  getInstallPlan,
+  getInstallPlans,
+  formatInstallPlan,
+  formatInstallPlans,
+  getInstallTargets,
+  getInstallTargetLabels,
+  runInstall,
+  runInstallAll,
   getSetupPlan,
+  getSetupPlans,
   formatSetupPlan,
+  formatSetupPlans,
   getSetupTargets,
+  getSetupTargetLabels,
   runSetup,
+  runSetupAll,
+  type InstallPlan,
   type SetupPlan,
 } from "./setup";
 export {
