@@ -1,3 +1,4 @@
+import { spawn } from "./process";
 import { log } from "./log";
 
 export type SetupTarget = "youtube" | "whisper" | "claude" | "codex";
@@ -63,15 +64,15 @@ const TOOLS: Dependency[] = [
     command: "yt-dlp",
     installHint: "brew install yt-dlp",
     purpose: "YouTube extraction",
-    setupCommand: "extractor setup youtube",
+    setupCommand: "extractor install youtube",
   },
   {
     id: "whisper",
     name: "whisper.cpp",
-    command: "whisper-cpp",
+    command: "whisper-cli",
     installHint: "brew install whisper-cpp",
     purpose: "Audio transcription fallback",
-    setupCommand: "extractor setup whisper",
+    setupCommand: "extractor install whisper",
   },
   {
     id: "claude",
@@ -79,7 +80,7 @@ const TOOLS: Dependency[] = [
     command: "claude",
     installHint: "npm i -g @anthropic-ai/claude-code",
     purpose: "AI summarization",
-    setupCommand: "extractor setup claude",
+    setupCommand: "extractor install claude",
   },
   {
     id: "codex",
@@ -87,7 +88,7 @@ const TOOLS: Dependency[] = [
     command: "codex",
     installHint: "npm i -g @openai/codex",
     purpose: "AI summarization",
-    setupCommand: "extractor setup codex",
+    setupCommand: "extractor install codex",
   },
 ];
 
@@ -106,7 +107,7 @@ const ENV_VARS: EnvVar[] = [
 
 async function which(cmd: string): Promise<boolean> {
   try {
-    const proc = Bun.spawn(["which", cmd], {
+    const proc = spawn(["which", cmd], {
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -159,7 +160,7 @@ export async function probeEnvironment(): Promise<DoctorReport> {
         available: false,
         status: "needs_dependency",
         requires: ["yt-dlp"],
-        setupCommand: "extractor setup youtube",
+        setupCommand: "extractor install youtube",
       };
 
   const aiSummary: CapabilityStatus = providers.length > 0
@@ -182,11 +183,11 @@ export async function probeEnvironment(): Promise<DoctorReport> {
 
   const recommendedActions: string[] = [];
   if (!hasYtDlp) {
-    recommendedActions.push("extractor setup youtube");
+    recommendedActions.push("extractor install youtube");
   }
   if (providers.length === 0) {
     recommendedActions.push(
-      "extractor setup codex  # or extractor setup claude, or set OPENAI_API_KEY / ANTHROPIC_API_KEY",
+      "extractor install codex  # or extractor install claude, or set OPENAI_API_KEY / ANTHROPIC_API_KEY",
     );
   }
 

@@ -15,13 +15,19 @@ import { writeOutput } from "./output/formatter";
 import { isValidUrl } from "./utils/url";
 import {
   formatSetupPlan,
+  formatSetupPlans,
   getSetupPlan,
-  getSetupTargets,
+  getSetupPlans,
+  getSetupTargetLabels,
   isSetupTarget,
   runSetup,
+  runSetupAll,
 } from "./setup";
 import { ExtractorError, unknownSetupTargetIssue } from "./errors";
-import { version } from "../package.json";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json");
 
 const HELP = `
 extractor - curl for AI-ready content
@@ -32,7 +38,7 @@ Usage:
   extractor <url> [options]
   extractor [options]      Read URL from stdin
   extractor doctor [--json]
-  extractor setup <target> [--run]
+  extractor install <target>
   extractor --check
   extractor --help
 
@@ -50,14 +56,13 @@ Options:
   --lang <code>            Caption language for YouTube (default: en)
   --provider <name>        AI provider for --summarize (claude|codex|none)
   --format <md|txt|json>   Advanced format override
-  --run                    Execute an automatic setup plan
   --check                  Alias for human-readable doctor output
   --version                Show version
   --help                   Show this help
 
 Commands:
   doctor                   Show dependency and capability status
-  setup                    Show or run setup for youtube|whisper|claude|codex
+  install                  Install youtube|whisper|claude|codex|all
 
 Compatibility:
   --raw                    Alias for default non-summarized output
@@ -68,20 +73,20 @@ Examples:
   extractor --json 'https://example.com/article'
   extractor --summarize 'https://example.com/article'
   extractor doctor --json
-  extractor setup youtube
-  extractor setup youtube --run
+  extractor install youtube
+  extractor install all
   printf '%s\n' 'https://example.com?a=1&b=2' | extractor
 `.trim();
 
 const SETUP_HELP = `
-extractor setup <target> [--run]
+extractor install <target>
 
 Targets:
-  ${getSetupTargets().join("\n  ")}
+  ${getSetupTargetLabels().join("\n  ")}
 
 Examples:
-  extractor setup youtube
-  extractor setup youtube --run
+  extractor install youtube
+  extractor install all
 `.trim();
 
 export interface CliOptions {
@@ -189,9 +194,19 @@ async function runSetupCommand(target: string | undefined, shouldRun: boolean): 
     return;
   }
 
+  if (target === "all") {
+    if (shouldRun) {
+      await runSetupAll();
+      return;
+    }
+
+    process.stdout.write(formatSetupPlans(await getSetupPlans()) + "\n");
+    return;
+  }
+
   if (!isSetupTarget(target)) {
     throw new ExtractorError(
-      unknownSetupTargetIssue(target, getSetupTargets()),
+      unknownSetupTargetIssue(target, getSetupTargetLabels()),
     );
   }
 
@@ -252,6 +267,11 @@ export async function run(args: string[]): Promise<void> {
 
     if (command === "setup") {
       await runSetupCommand(positionals[1], values.run as boolean);
+      return;
+    }
+
+    if (command === "install") {
+      await runSetupCommand(positionals[1], true);
       return;
     }
 

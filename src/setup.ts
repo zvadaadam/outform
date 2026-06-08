@@ -2,6 +2,7 @@ import { ExtractorError, setupFailedIssue } from "./errors";
 import type { SetupTarget } from "./utils/deps";
 import { hasCommand } from "./utils/deps";
 import { logProgress, logSuccess } from "./utils/log";
+import { spawn } from "./utils/process";
 
 interface SetupConfig {
   target: SetupTarget;
@@ -22,6 +23,8 @@ export interface SetupPlan {
   manualHints: string[];
 }
 
+export type InstallPlan = SetupPlan;
+
 const SETUP_CONFIGS: Record<SetupTarget, SetupConfig> = {
   youtube: {
     target: "youtube",
@@ -39,7 +42,7 @@ const SETUP_CONFIGS: Record<SetupTarget, SetupConfig> = {
   whisper: {
     target: "whisper",
     name: "whisper.cpp",
-    command: "whisper-cpp",
+    command: "whisper-cli",
     purpose: "Enable audio transcription fallback for YouTube",
     manualHints: ["brew install whisper-cpp"],
     async resolveAutoCommand() {
@@ -81,6 +84,10 @@ export function getSetupTargets(): SetupTarget[] {
   return Object.keys(SETUP_CONFIGS) as SetupTarget[];
 }
 
+export function getSetupTargetLabels(): string[] {
+  return [...getSetupTargets(), "all"];
+}
+
 export function isSetupTarget(value: string): value is SetupTarget {
   return value in SETUP_CONFIGS;
 }
@@ -103,7 +110,7 @@ export async function getSetupPlan(target: SetupTarget): Promise<SetupPlan> {
 export function formatSetupPlan(plan: SetupPlan): string {
   const lines: string[] = [];
 
-  lines.push(`extractor setup ${plan.target}`);
+  lines.push(`extractor install ${plan.target}`);
   lines.push("");
   lines.push(`  Purpose: ${plan.purpose}`);
   lines.push(`  Tool: ${plan.name}`);
@@ -117,7 +124,7 @@ export function formatSetupPlan(plan: SetupPlan): string {
 
   if (plan.autoInstallCommand) {
     lines.push(`  Automatic install: ${plan.autoInstallCommand.join(" ")}`);
-    lines.push(`  Run \`extractor setup ${plan.target} --run\` to install it automatically.`);
+    lines.push(`  Run \`extractor install ${plan.target}\` to install it automatically.`);
     lines.push("");
   }
 
@@ -125,6 +132,35 @@ export function formatSetupPlan(plan: SetupPlan): string {
   for (const hint of plan.manualHints) {
     lines.push(`    - ${hint}`);
   }
+
+  return lines.join("\n");
+}
+
+export async function getSetupPlans(): Promise<SetupPlan[]> {
+  return Promise.all(getSetupTargets().map((target) => getSetupPlan(target)));
+}
+
+export function formatSetupPlans(plans: SetupPlan[]): string {
+  const lines: string[] = [];
+
+  lines.push("extractor install all");
+  lines.push("");
+  lines.push("  Installs every supported optional tool:");
+  lines.push("");
+
+  for (const plan of plans) {
+    const status = plan.installed ? "already installed" : "missing";
+    const install = plan.autoInstallCommand
+      ? plan.autoInstallCommand.join(" ")
+      : plan.manualHints.join(" | ");
+
+    lines.push(`  - ${plan.name}: ${status}`);
+    lines.push(`    ${plan.purpose}`);
+    lines.push(`    Install: ${install}`);
+  }
+
+  lines.push("");
+  lines.push("  Run `extractor install all` to install everything.");
 
   return lines.join("\n");
 }
@@ -143,14 +179,14 @@ export async function runSetup(target: SetupTarget): Promise<void> {
         target: plan.target,
         name: plan.name,
         manualHints: plan.manualHints,
-        message: `Automatic setup is not available for ${plan.name} on this machine. Try one of: ${plan.manualHints.join(" | ")}`,
+        message: `Automatic install is not available for ${plan.name} on this machine. Try one of: ${plan.manualHints.join(" | ")}`,
       }),
     );
   }
 
   logProgress(`Running: ${plan.autoInstallCommand.join(" ")}`);
 
-  const proc = Bun.spawn(plan.autoInstallCommand, {
+  const proc = spawn(plan.autoInstallCommand, {
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -168,3 +204,18 @@ export async function runSetup(target: SetupTarget): Promise<void> {
 
   logSuccess(`${plan.name} is installed and ready.`);
 }
+
+export async function runSetupAll(): Promise<void> {
+  for (const target of getSetupTargets()) {
+    await runSetup(target);
+  }
+}
+
+export const getInstallTargets = getSetupTargets;
+export const getInstallTargetLabels = getSetupTargetLabels;
+export const getInstallPlan = getSetupPlan;
+export const getInstallPlans = getSetupPlans;
+export const formatInstallPlan = formatSetupPlan;
+export const formatInstallPlans = formatSetupPlans;
+export const runInstall = runSetup;
+export const runInstallAll = runSetupAll;

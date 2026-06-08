@@ -1,5 +1,3 @@
-#!/usr/bin/env bun
-
 export * from "./api";
 export {
   probeEnvironment,
@@ -8,10 +6,23 @@ export {
   type DoctorReport,
 } from "./utils/deps";
 export {
+  getInstallPlan,
+  getInstallPlans,
+  formatInstallPlan,
+  formatInstallPlans,
+  getInstallTargets,
+  getInstallTargetLabels,
+  runInstall,
+  runInstallAll,
   getSetupPlan,
+  getSetupPlans,
   formatSetupPlan,
+  formatSetupPlans,
   getSetupTargets,
+  getSetupTargetLabels,
   runSetup,
+  runSetupAll,
+  type InstallPlan,
   type SetupPlan,
 } from "./setup";
 export {
@@ -25,8 +36,3 @@ export {
   type ExtractorErrorCode,
   type ExtractorIssue,
 } from "./errors";
-
-if (import.meta.main) {
-  const { run } = await import("./cli");
-  await run(process.argv.slice(2));
-}

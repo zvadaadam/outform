@@ -1,7 +1,8 @@
-import { unlink } from "node:fs/promises";
+import { unlink, readFile } from "node:fs/promises";
 import type { Provider } from "./provider";
 import { logError, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
+import { spawn, waitForResult } from "../utils/process";
 
 const SUMMARIZE_PROMPT =
   "Summarize the following text concisely. Capture the key points, main arguments, and conclusions. Output only the summary, no preamble.\n\n";
@@ -68,21 +69,23 @@ export async function summarize(
 }
 
 async function invokeClaude(content: string): Promise<string> {
-  const proc = Bun.spawn(["claude", "-p", SUMMARIZE_PROMPT.trim()], {
-    stdin: new Response(content),
+  const proc = spawn(["claude", "-p", SUMMARIZE_PROMPT.trim()], {
+    stdin: content,
     stdout: "pipe",
     stderr: "pipe",
   });
 
-  const result = await withTimeout(proc.exited, "claude CLI", proc);
-  const output = await new Response(proc.stdout).text();
+  const { exitCode, stdout, stderr } = await withTimeout(
+    waitForResult(proc),
+    "claude CLI",
+    proc,
+  );
 
-  if (result !== 0) {
-    const stderr = await new Response(proc.stderr).text();
+  if (exitCode !== 0) {
     throw new Error(`claude CLI failed: ${stderr.trim() || "unknown error"}`);
   }
 
-  return output.trim();
+  return stdout.trim();
 }
 
 async function invokeCodex(content: string): Promise<string> {
@@ -90,23 +93,26 @@ async function invokeCodex(content: string): Promise<string> {
   const fullPrompt = SUMMARIZE_PROMPT.trim() + "\n\n" + content;
 
   try {
-    const proc = Bun.spawn(
+    const proc = spawn(
       ["codex", "exec", "-", "--ephemeral", "--skip-git-repo-check", "-o", tmpOutput],
       {
-        stdin: new Response(fullPrompt),
+        stdin: fullPrompt,
         stdout: "pipe",
         stderr: "pipe",
       },
     );
 
-    const exitCode = await withTimeout(proc.exited, "codex CLI", proc);
+    const { exitCode, stderr } = await withTimeout(
+      waitForResult(proc),
+      "codex CLI",
+      proc,
+    );
 
     if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
       throw new Error(`codex CLI failed: ${stderr.trim() || "unknown error"}`);
     }
 
-    const output = await Bun.file(tmpOutput).text();
+    const output = await readFile(tmpOutput, "utf-8");
     return output.trim();
   } finally {
     try {

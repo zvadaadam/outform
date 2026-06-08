@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { readFile, rm } from "fs/promises";
 
-const CLI = [process.execPath, "run", "src/index.ts"];
+const CLI = [process.execPath, "run", "src/bin.ts"];
 const NO_TOOLS_ENV = { PATH: "/tmp/extractor-no-tools" };
 
 function run(args: string[], envOverrides: Record<string, string | undefined> = {}) {
@@ -29,7 +29,7 @@ describe("CLI flags", () => {
     expect(stdout).toContain("--summarize");
     expect(stdout).toContain("--output");
     expect(stdout).toContain("doctor");
-    expect(stdout).toContain("setup");
+    expect(stdout).toContain("install");
   });
 
   test("-h is shorthand for --help", async () => {
@@ -402,27 +402,40 @@ describe("CLI doctor and setup", () => {
     expect(parsed.capabilities.aiSummary).toBeDefined();
   });
 
-  test("setup without a target prints help", async () => {
-    const { stdout, exitCode } = await collect(run(["setup"]));
+  test("install without a target prints help", async () => {
+    const { stdout, exitCode } = await collect(run(["install"]));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor setup <target> [--run]");
+    expect(stdout).toContain("extractor install <target>");
     expect(stdout).toContain("youtube");
     expect(stdout).toContain("codex");
+    expect(stdout).toContain("all");
   });
 
-  test("setup youtube prints a plan without changing the machine", async () => {
+  test("setup remains a dry-run compatibility alias", async () => {
     const { stdout, exitCode } = await collect(run(["setup", "youtube"], NO_TOOLS_ENV));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor setup youtube");
+    expect(stdout).toContain("extractor install youtube");
     expect(stdout).toContain("Enable YouTube extraction");
     expect(stdout).toContain("yt-dlp");
     expect(stdout).toContain("Manual install options");
   });
 
-  test("unknown setup target exits 1 with a helpful error", async () => {
-    const { stderr, exitCode } = await collect(run(["setup", "unknown"]));
+  test("setup all remains a dry-run compatibility alias", async () => {
+    const { stdout, exitCode } = await collect(run(["setup", "all"], NO_TOOLS_ENV));
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("extractor install all");
+    expect(stdout).toContain("yt-dlp");
+    expect(stdout).toContain("whisper.cpp");
+    expect(stdout).toContain("claude CLI");
+    expect(stdout).toContain("codex CLI");
+    expect(stdout).toContain("extractor install all");
+  });
+
+  test("unknown install target exits 1 with a helpful error", async () => {
+    const { stderr, exitCode } = await collect(run(["install", "unknown"]));
     expect(exitCode).toBe(1);
-    expect(stderr).toContain("Unknown setup target");
+    expect(stderr).toContain("Unknown install target");
     expect(stderr).toContain("youtube");
+    expect(stderr).toContain("all");
   });
 });

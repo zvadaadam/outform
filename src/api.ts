@@ -234,7 +234,7 @@ export async function inspect(
         available,
         capability: "youtube",
         dependency: available ? undefined : "yt-dlp",
-        setupCommand: available ? undefined : "extractor setup youtube",
+        setupCommand: available ? undefined : "extractor install youtube",
         installHints: available ? undefined : ["brew install yt-dlp", "pip install yt-dlp"],
       };
 

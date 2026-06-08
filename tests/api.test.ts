@@ -107,7 +107,7 @@ describe("JS API", () => {
     expect(parsed.type).toBe("youtube");
     expect(parsed.ready).toBe(false);
     expect(parsed.issues[0].code).toBe("MISSING_DEPENDENCY");
-    expect(parsed.issues[0].setupCommand).toBe("extractor setup youtube");
+    expect(parsed.issues[0].setupCommand).toBe("extractor install youtube");
   });
 
   test("extract() throws a typed error for missing YouTube dependency", async () => {
@@ -137,7 +137,7 @@ describe("JS API", () => {
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe("MISSING_DEPENDENCY");
-    expect(parsed.setupCommand).toBe("extractor setup youtube");
+    expect(parsed.setupCommand).toBe("extractor install youtube");
     expect(parsed.dependency).toBe("yt-dlp");
   });
 
@@ -163,18 +163,18 @@ describe("JS API", () => {
     expect(parsed.jsonType).toBe("web");
   });
 
-  test("probeEnvironment() and getSetupPlan() are available from the JS API", async () => {
+  test("probeEnvironment() and getInstallPlan() are available from the JS API", async () => {
     const script = `
-      import { probeEnvironment, getSetupPlan } from "./src/index.ts";
+      import { probeEnvironment, getInstallPlan } from "./src/index.ts";
 
       const environment = await probeEnvironment();
-      const setup = await getSetupPlan("youtube");
+      const installPlan = await getInstallPlan("youtube");
 
       console.log(JSON.stringify({
         hasPlatform: Boolean(environment.platform),
         hasCapabilities: Boolean(environment.capabilities.youtube && environment.capabilities.aiSummary),
-        setupTarget: setup.target,
-        setupName: setup.name,
+        setupTarget: installPlan.target,
+        setupName: installPlan.name,
       }));
     `;
 

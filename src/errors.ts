@@ -84,7 +84,7 @@ export function missingDependencyIssue(input: {
     capability: input.capability,
     dependency: input.dependency,
     setupTarget: input.setupTarget,
-    setupCommand: `extractor setup ${input.setupTarget}`,
+    setupCommand: `extractor install ${input.setupTarget}`,
     installHints: input.installHints,
   };
 }
@@ -107,8 +107,8 @@ export function noAiProviderIssue(input: {
     provider: input.provider,
     installHints:
       input.installHints ?? [
-        "extractor setup claude",
-        "extractor setup codex",
+        "extractor install claude",
+        "extractor install codex",
         "export ANTHROPIC_API_KEY=sk-...",
         "export OPENAI_API_KEY=sk-...",
       ],
@@ -121,7 +121,7 @@ export function unknownSetupTargetIssue(
 ): ExtractorIssue {
   return {
     code: "UNKNOWN_SETUP_TARGET",
-    message: `Unknown setup target "${target}". Use one of: ${availableTargets.join(", ")}.`,
+    message: `Unknown install target "${target}". Use one of: ${availableTargets.join(", ")}.`,
     capability: "setup",
     setupTarget: target,
   };
@@ -137,11 +137,11 @@ export function setupFailedIssue(input: {
     code: "SETUP_FAILED",
     message:
       input.message ??
-      `${input.name} setup failed. Try manually: ${input.manualHints.join(" | ")}`,
+      `${input.name} install failed. Try manually: ${input.manualHints.join(" | ")}`,
     capability: "setup",
     dependency: input.name,
     setupTarget: input.target,
-    setupCommand: `extractor setup ${input.target}`,
+    setupCommand: `extractor install ${input.target}`,
     installHints: input.manualHints,
   };
 }
