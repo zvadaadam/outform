@@ -143,7 +143,7 @@ export async function getSetupPlans(): Promise<SetupPlan[]> {
 export function formatSetupPlans(plans: SetupPlan[]): string {
   const lines: string[] = [];
 
-  lines.push("extractor install all");
+  lines.push("extractor install");
   lines.push("");
   lines.push("  Installs every supported optional tool:");
   lines.push("");
@@ -160,7 +160,7 @@ export function formatSetupPlans(plans: SetupPlan[]): string {
   }
 
   lines.push("");
-  lines.push("  Run `extractor install all` to install everything.");
+  lines.push("  Run `extractor install` to install everything.");
 
   return lines.join("\n");
 }

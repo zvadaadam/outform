@@ -1,5 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import { readFile, rm } from "fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 
 const CLI = [process.execPath, "run", "src/bin.ts"];
 const NO_TOOLS_ENV = { PATH: "/tmp/extractor-no-tools" };
@@ -17,6 +19,21 @@ async function collect(proc: ReturnType<typeof Bun.spawn>) {
   const stderr = await new Response(proc.stderr as ReadableStream).text();
   const exitCode = await proc.exited;
   return { stdout, stderr, exitCode };
+}
+
+async function createFakeToolPath(commands: string[]): Promise<{ dir: string; path: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "extractor-tools-"));
+
+  for (const command of commands) {
+    const file = join(dir, command);
+    await writeFile(file, "#!/bin/sh\nexit 0\n");
+    await chmod(file, 0o755);
+  }
+
+  return {
+    dir,
+    path: `${dir}:/usr/bin:/bin`,
+  };
 }
 
 describe("CLI flags", () => {
@@ -402,13 +419,27 @@ describe("CLI doctor and setup", () => {
     expect(parsed.capabilities.aiSummary).toBeDefined();
   });
 
-  test("install without a target prints help", async () => {
-    const { stdout, exitCode } = await collect(run(["install"]));
-    expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor install <target>");
-    expect(stdout).toContain("youtube");
-    expect(stdout).toContain("codex");
-    expect(stdout).toContain("all");
+  test("install without a target installs every dependency by default", async () => {
+    const fakeTools = await createFakeToolPath([
+      "yt-dlp",
+      "whisper-cli",
+      "claude",
+      "codex",
+    ]);
+
+    try {
+      const { stdout, stderr, exitCode } = await collect(
+        run(["install"], { PATH: fakeTools.path }),
+      );
+      expect(exitCode).toBe(0);
+      expect(stdout).toBe("");
+      expect(stderr).toContain("yt-dlp is already installed");
+      expect(stderr).toContain("whisper.cpp is already installed");
+      expect(stderr).toContain("claude CLI is already installed");
+      expect(stderr).toContain("codex CLI is already installed");
+    } finally {
+      await rm(fakeTools.dir, { recursive: true, force: true });
+    }
   });
 
   test("setup remains a dry-run compatibility alias", async () => {
@@ -423,12 +454,12 @@ describe("CLI doctor and setup", () => {
   test("setup all remains a dry-run compatibility alias", async () => {
     const { stdout, exitCode } = await collect(run(["setup", "all"], NO_TOOLS_ENV));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor install all");
+    expect(stdout).toContain("extractor install");
     expect(stdout).toContain("yt-dlp");
     expect(stdout).toContain("whisper.cpp");
     expect(stdout).toContain("claude CLI");
     expect(stdout).toContain("codex CLI");
-    expect(stdout).toContain("extractor install all");
+    expect(stdout).toContain("Run `extractor install` to install everything.");
   });
 
   test("unknown install target exits 1 with a helpful error", async () => {

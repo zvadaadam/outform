@@ -2,110 +2,76 @@
 
 `extractor` is curl for AI-ready content.
 
-Give it a URL and it returns clean, structured content for humans, scripts, and coding agents.
-It automatically detects web pages, PDFs, and YouTube videos, then converts them into AI-ready Markdown, text, or JSON.
+Give it a URL and it returns clean Markdown, text, or JSON for humans, scripts, and coding agents. It detects web pages, PDFs, and YouTube videos automatically.
 
-```bash
-extractor 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
-```
+## Installation
 
-## Requirements
+### Global Installation
 
-Base runtime:
-
-- Node.js 18+
-
-Optional external dependencies:
-
-| Capability | Works by default | Requires |
-|------------|------------------|----------|
-| Web page extraction | Yes | Node.js 18+ |
-| PDF extraction | Yes | Node.js 18+ |
-| YouTube extraction | No | `yt-dlp` |
-| Audio transcription fallback | No | `whisper.cpp` |
-| AI summaries | No | `claude`, `codex`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` |
-
-Check what your machine supports:
-
-```bash
-extractor doctor
-extractor doctor --json
-```
-
-Install optional tools explicitly:
-
-```bash
-extractor install youtube
-extractor install all
-```
-
-## Install
-
-Install the CLI globally with npm:
+Install the CLI:
 
 ```bash
 npm install -g @zvadaadam/extractor
+extractor install
 ```
 
-Then verify what your machine can do:
+`extractor install` installs the optional tools used for richer extraction, including YouTube captions, audio transcription fallback, and AI summaries when an automatic installer is available.
 
-```bash
-extractor doctor
-```
+### Project Installation
 
-Install the SDK in another project with:
+For projects that want to pin the version in `package.json`:
 
 ```bash
 npm install @zvadaadam/extractor
+npx extractor install
 ```
 
-Capability-specific dependencies are not auto-installed:
+Then use it from package scripts, `npx extractor`, or the JS API.
 
-| Tool | Purpose | Install |
-|------|---------|---------|
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | YouTube metadata & captions | `brew install yt-dlp` |
-| [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | Audio transcription fallback | `brew install whisper-cpp` |
-| [claude](https://docs.anthropic.com/en/docs/claude-code) | AI summaries | `npm install -g @anthropic-ai/claude-code` |
-| [codex](https://github.com/openai/codex) | AI summaries | `npm install -g @openai/codex` |
+### Requirements
 
-Run `extractor doctor` to see what is installed and what is missing.
-Use `extractor install all` to install every supported optional tool in one pass.
+- Node.js 18+
+- Web page extraction and PDF extraction work from the npm package alone.
+- YouTube extraction needs `yt-dlp`.
+- Audio transcription fallback needs `whisper.cpp`.
+- AI summaries need `claude`, `codex`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`.
 
-## CLI contract
-
-By default, `extractor` behaves like curl for AI-ready content:
-
-- input: a URL as an argument or on stdin
-- output: AI-ready Markdown on stdout
-- logs: progress and status on stderr
-- AI: off by default, opt in with `--summarize`
-
-### Core commands
+Check the current machine at any time:
 
 ```bash
-extractor <url>
-extractor --json <url>
-extractor --text <url>
-extractor --summarize <url>
-extractor --output file.md <url>
 extractor doctor
-extractor doctor --json
-extractor install youtube
-extractor install all
 ```
 
-### Examples
+## Quick Start
 
-Extract a YouTube video as Markdown:
+Extract a web page as Markdown:
+
+```bash
+extractor 'https://paulgraham.com/superlinear.html'
+```
+
+Extract a YouTube video:
 
 ```bash
 extractor 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
 ```
 
-Extract a web page as JSON:
+Write the result to a file:
+
+```bash
+extractor --output video.md 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
+```
+
+Return structured JSON:
 
 ```bash
 extractor --json 'https://paulgraham.com/superlinear.html'
+```
+
+Return plain text:
+
+```bash
+extractor --text 'https://paulgraham.com/superlinear.html'
 ```
 
 Add an AI summary:
@@ -114,41 +80,35 @@ Add an AI summary:
 extractor --summarize 'https://paulgraham.com/superlinear.html'
 ```
 
-Write output to a file:
-
-```bash
-extractor --output video.md 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
-```
-
-Check environment health:
-
-```bash
-extractor doctor
-```
-
-Get machine-readable health output for agents:
-
-```bash
-extractor doctor --json
-```
-
-Show how to enable YouTube extraction:
-
-```bash
-extractor install youtube
-```
-
 Pipe a URL on stdin:
 
 ```bash
 printf '%s\n' 'https://example.com?a=1&b=2' | extractor
 ```
 
-Save stdout yourself:
+## Commands
 
 ```bash
-extractor 'https://paulgraham.com/superlinear.html' > article.md
+extractor <url>                 # Extract AI-ready Markdown
+extractor --json <url>          # Extract structured JSON
+extractor --text <url>          # Extract plain text
+extractor --summarize <url>     # Add an AI summary
+extractor --output file.md <url> # Write output to a file
+extractor doctor                # Check installed tools and capabilities
+extractor doctor --json         # Machine-readable environment report
+extractor install               # Install every supported optional tool
 ```
+
+Advanced targeted installs are also available:
+
+```bash
+extractor install youtube
+extractor install whisper
+extractor install claude
+extractor install codex
+```
+
+If automatic installation is not available on your machine, `extractor install` prints the manual command to run.
 
 ## Options
 
@@ -159,7 +119,7 @@ extractor 'https://paulgraham.com/superlinear.html' > article.md
 --output <path>          Write result to a file instead of stdout
 --lang <code>            Caption language for YouTube (default: en)
 --provider <name>        AI provider for --summarize (claude|codex|none)
---format md|txt|json     Advanced format override
+--format <md|txt|json>   Advanced format override
 --check                  Alias for human-readable doctor output
 --version                Show version
 --help                   Show help
@@ -172,68 +132,64 @@ Compatibility aliases retained for older scripts:
 --stdout                 Alias for default stdout output
 ```
 
+## Output Contract
+
+By default, `extractor` behaves like curl for content:
+
+- input: a URL as an argument or on stdin
+- output: AI-ready Markdown on stdout
+- logs: progress and status on stderr
+- AI: off by default; opt in with `--summarize`
+
+That means it composes cleanly with shell tools:
+
+```bash
+extractor 'https://paulgraham.com/superlinear.html' > article.md
+extractor --json 'https://example.com/article' | jq .
+```
+
 ## Doctor
 
-`extractor doctor` reports the current state of the machine:
+`extractor doctor` reports:
 
 - installed tools
 - configured API keys
 - available capabilities
 - recommended next actions
 
-For agents and scripts, `extractor doctor --json` returns a structured JSON report that can be parsed programmatically.
+For agents and scripts, use JSON:
 
-## Optional tools
-
-`extractor install <target>` installs a missing optional dependency.
-Use `extractor doctor` first if you want to inspect what is already available.
-
-Supported targets:
-
-- `youtube`
-- `whisper`
-- `claude`
-- `codex`
-- `all`
-
-If an automatic installer is available, `extractor install <target>` executes it explicitly.
-`extractor install all` installs every supported optional tool.
+```bash
+extractor doctor --json
+```
 
 ## JS API
-
-For SDK usage, the main flow is:
-
-- `extract(url, options?)`
-- `inspect(url, options?)`
-- typed `ExtractorError` failures
 
 Use the same extraction engine directly from Node.js or TypeScript:
 
 ```ts
 import {
+  ExtractorError,
   extract,
+  getInstallPlan,
   inspect,
   probeEnvironment,
-  getInstallPlan,
-  ExtractorError,
+  render,
 } from "@zvadaadam/extractor";
 
-const inspection = await inspect(
-  "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s",
-);
+const url = "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s";
 
+const inspection = await inspect(url);
 if (!inspection.ready) {
   console.log(inspection.issues);
 }
 
 try {
-  const result = await extract(
-    "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s",
-  );
+  const result = await extract(url);
 
   console.log(result.type);
   console.log(result.markdown);
-  console.log(result.json);
+  console.log(render(result, "json"));
 } catch (error) {
   if (error instanceof ExtractorError) {
     console.log(error.code);
@@ -245,7 +201,7 @@ const environment = await probeEnvironment();
 const installPlan = await getInstallPlan("youtube");
 ```
 
-`extract(url, options?)` returns a small, agent-friendly object:
+`extract(url, options?)` returns an agent-friendly object:
 
 - `type`, `title`, `source`, `summary`
 - `markdown` for AI-ready Markdown
@@ -259,50 +215,33 @@ const installPlan = await getInstallPlan("youtube");
 - structured `issues`
 - extraction and summary capability info
 
-Options:
+## Troubleshooting
 
-```ts
-type ExtractOptions = {
-  summarize?: boolean;
-  lang?: string;
-  provider?: "claude" | "codex" | "none";
-  logger?: ExtractLogger;
-};
+If YouTube extraction fails, run:
+
+```bash
+extractor doctor
+extractor install
 ```
 
-By default, the SDK is quiet. If you want CLI-style progress output, pass a logger:
+If you only want the YouTube dependency:
 
-```ts
-import { extract, createStderrLogger } from "@zvadaadam/extractor";
-
-const result = await extract("https://example.com", {
-  logger: createStderrLogger(),
-});
+```bash
+extractor install youtube
 ```
 
-`probeEnvironment()` is the SDK-friendly version of `doctor`, while `doctor --json` remains the best shell entrypoint for agents.
+If summaries do not run, either install a supported CLI:
 
-## Output model
+```bash
+extractor install codex
+```
 
-`extractor` is designed to be easy for both developers and coding agents:
+or set an API key:
 
-- `stdout` contains only the extracted content
-- `stderr` contains progress, dependency hints, and errors
-- exit code `0` means success
-- non-zero exit codes mean extraction failed
-
-## AI summaries
-
-AI summaries are opt-in via `--summarize`.
-
-Extractor looks for providers in this order:
-
-1. `claude` CLI
-2. `codex` CLI
-3. `ANTHROPIC_API_KEY`
-4. `OPENAI_API_KEY`
-
-If you request `--summarize` and no provider is available, extractor exits with a helpful error.
+```bash
+export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-...
+```
 
 ## Development
 
