@@ -38,7 +38,7 @@ Usage:
   extractor <url> [options]
   extractor [options]      Read URL from stdin
   extractor doctor [--json]
-  extractor install <target>
+  extractor install [target]
   extractor --check
   extractor --help
 
@@ -62,7 +62,7 @@ Options:
 
 Commands:
   doctor                   Show dependency and capability status
-  install                  Install youtube|whisper|claude|codex|all
+  install                  Install supported optional tools
 
 Compatibility:
   --raw                    Alias for default non-summarized output
@@ -73,20 +73,9 @@ Examples:
   extractor --json 'https://example.com/article'
   extractor --summarize 'https://example.com/article'
   extractor doctor --json
+  extractor install
   extractor install youtube
-  extractor install all
-  printf '%s\n' 'https://example.com?a=1&b=2' | extractor
-`.trim();
-
-const SETUP_HELP = `
-extractor install <target>
-
-Targets:
-  ${getSetupTargetLabels().join("\n  ")}
-
-Examples:
-  extractor install youtube
-  extractor install all
+  printf '%s\\n' 'https://example.com?a=1&b=2' | extractor
 `.trim();
 
 export interface CliOptions {
@@ -190,7 +179,12 @@ async function runDoctor(jsonOutput: boolean): Promise<void> {
 
 async function runSetupCommand(target: string | undefined, shouldRun: boolean): Promise<void> {
   if (!target) {
-    process.stdout.write(SETUP_HELP + "\n");
+    if (shouldRun) {
+      await runSetupAll();
+      return;
+    }
+
+    process.stdout.write(formatSetupPlans(await getSetupPlans()) + "\n");
     return;
   }
 
