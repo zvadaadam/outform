@@ -32,7 +32,7 @@ export {
   type ExtractLogger,
 } from "./utils/log";
 export {
-  ExtractorError,
-  type ExtractorErrorCode,
-  type ExtractorIssue,
+  OutformError,
+  type OutformErrorCode,
+  type OutformIssue,
 } from "./errors";

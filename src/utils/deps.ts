@@ -1,5 +1,6 @@
-import { spawn } from "./process";
 import { log } from "./log";
+import { access, constants } from "node:fs/promises";
+import { delimiter, extname, isAbsolute, join } from "node:path";
 
 export type SetupTarget = "youtube" | "whisper" | "claude" | "codex";
 
@@ -64,7 +65,7 @@ const TOOLS: Dependency[] = [
     command: "yt-dlp",
     installHint: "brew install yt-dlp",
     purpose: "YouTube extraction",
-    setupCommand: "extractor install youtube",
+    setupCommand: "outform install youtube",
   },
   {
     id: "whisper",
@@ -72,7 +73,7 @@ const TOOLS: Dependency[] = [
     command: "whisper-cli",
     installHint: "brew install whisper-cpp",
     purpose: "Audio transcription fallback",
-    setupCommand: "extractor install whisper",
+    setupCommand: "outform install whisper",
   },
   {
     id: "claude",
@@ -80,7 +81,7 @@ const TOOLS: Dependency[] = [
     command: "claude",
     installHint: "npm i -g @anthropic-ai/claude-code",
     purpose: "AI summarization",
-    setupCommand: "extractor install claude",
+    setupCommand: "outform install claude",
   },
   {
     id: "codex",
@@ -88,7 +89,7 @@ const TOOLS: Dependency[] = [
     command: "codex",
     installHint: "npm i -g @openai/codex",
     purpose: "AI summarization",
-    setupCommand: "extractor install codex",
+    setupCommand: "outform install codex",
   },
 ];
 
@@ -105,28 +106,33 @@ const ENV_VARS: EnvVar[] = [
   },
 ];
 
-async function which(cmd: string): Promise<boolean> {
-  try {
-    const proc = spawn(["which", cmd], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const code = await proc.exited;
-    return code === 0;
-  } catch {
-    return false;
-  }
-}
-
 export async function hasCommand(cmd: string): Promise<boolean> {
-  return which(cmd);
+  const pathValue = Object.entries(process.env).find(
+    ([key]) => key.toLowerCase() === "path",
+  )?.[1];
+  const pathEntries = isAbsolute(cmd) ? [""] : (pathValue ?? "").split(delimiter);
+  const extensions = process.platform === "win32" && !extname(cmd)
+    ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";")
+    : [""];
+
+  for (const directory of pathEntries) {
+    for (const extension of extensions) {
+      const candidate = isAbsolute(cmd) ? cmd : join(directory || ".", cmd + extension);
+      try {
+        await access(candidate, process.platform === "win32" ? constants.F_OK : constants.X_OK);
+        return true;
+      } catch {}
+    }
+  }
+
+  return false;
 }
 
 export async function probeEnvironment(): Promise<DoctorReport> {
   const tools = await Promise.all(
     TOOLS.map(async (dep) => ({
       ...dep,
-      found: await which(dep.command),
+      found: await hasCommand(dep.command),
     })),
   );
 
@@ -160,7 +166,7 @@ export async function probeEnvironment(): Promise<DoctorReport> {
         available: false,
         status: "needs_dependency",
         requires: ["yt-dlp"],
-        setupCommand: "extractor install youtube",
+        setupCommand: "outform install youtube",
       };
 
   const aiSummary: CapabilityStatus = providers.length > 0
@@ -183,11 +189,11 @@ export async function probeEnvironment(): Promise<DoctorReport> {
 
   const recommendedActions: string[] = [];
   if (!hasYtDlp) {
-    recommendedActions.push("extractor install youtube");
+    recommendedActions.push("outform install youtube");
   }
   if (providers.length === 0) {
     recommendedActions.push(
-      "extractor install codex  # or extractor install claude, or set OPENAI_API_KEY / ANTHROPIC_API_KEY",
+      "outform install codex  # or outform install claude, or set OPENAI_API_KEY / ANTHROPIC_API_KEY",
     );
   }
 
@@ -223,7 +229,7 @@ export function formatDoctorReport(report: DoctorReport): string {
   const envCount = report.env.filter((item) => item.found).length;
   const statusWidth = 10;
 
-  lines.push("extractor — doctor (dependency check)");
+  lines.push("outform — doctor (dependency check)");
   lines.push("");
   lines.push(`  System: ${report.platform} ${report.arch}`);
   lines.push("");

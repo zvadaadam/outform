@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 const CLI = [process.execPath, "run", "src/bin.ts"];
-const NO_TOOLS_ENV = { PATH: "/tmp/extractor-no-tools" };
+const NO_TOOLS_ENV = { PATH: "/tmp/outform-no-tools" };
 
 function run(args: string[], envOverrides: Record<string, string | undefined> = {}) {
   return Bun.spawn([...CLI, ...args], {
@@ -22,7 +22,7 @@ async function collect(proc: ReturnType<typeof Bun.spawn>) {
 }
 
 async function createFakeToolPath(commands: string[]): Promise<{ dir: string; path: string }> {
-  const dir = await mkdtemp(join(tmpdir(), "extractor-tools-"));
+  const dir = await mkdtemp(join(tmpdir(), "outform-tools-"));
 
   for (const command of commands) {
     const file = join(dir, command);
@@ -40,7 +40,7 @@ describe("CLI flags", () => {
   test("--help prints curl-style usage and exits 0", async () => {
     const { stdout, exitCode } = await collect(run(["--help"]));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor - curl for AI-ready content");
+    expect(stdout).toContain("outform - curl for AI-ready content");
     expect(stdout).toContain("--json");
     expect(stdout).toContain("--text");
     expect(stdout).toContain("--summarize");
@@ -52,13 +52,13 @@ describe("CLI flags", () => {
   test("-h is shorthand for --help", async () => {
     const { stdout, exitCode } = await collect(run(["-h"]));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor - curl for AI-ready content");
+    expect(stdout).toContain("outform - curl for AI-ready content");
   });
 
   test("--version prints version and exits 0", async () => {
     const { stdout, exitCode } = await collect(run(["--version"]));
     expect(exitCode).toBe(0);
-    expect(stdout).toMatch(/^extractor v\d+\.\d+\.\d+\n$/);
+    expect(stdout).toMatch(/^outform v\d+\.\d+\.\d+\n$/);
   });
 
   test("--check prints status table with tools, env vars, and capabilities", async () => {
@@ -82,10 +82,10 @@ describe("CLI flags", () => {
 });
 
 describe("CLI error handling", () => {
-  test("no URL prints error to stderr and exits 1", async () => {
+  test("no source prints error to stderr and exits 1", async () => {
     const { stderr, stdout, exitCode } = await collect(run([]));
     expect(exitCode).toBe(1);
-    expect(stderr).toContain("No URL provided");
+    expect(stderr).toContain("No source provided");
     expect(stderr).toContain("--help");
     expect(stdout).toBe("");
   });
@@ -136,6 +136,24 @@ describe("CLI error handling", () => {
     );
     expect(exitCode).toBe(1);
     expect(stderr).toContain("Use --provider together with --summarize");
+  });
+});
+
+describe("CLI local file extraction", () => {
+  test("reads Markdown from a local path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "outform-local-"));
+    const file = join(dir, "release-notes.md");
+    await writeFile(file, "# Release notes\n\nOutform reads local files.");
+
+    try {
+      const { stdout, stderr, exitCode } = await collect(run([file]));
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain("Outform reads local files.");
+      expect(stdout).toContain(`**Source:** ${file}`);
+      expect(stderr).toContain("Reading file");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -241,7 +259,7 @@ describe("CLI web extraction end-to-end", () => {
   });
 
   test("--output writes file and keeps stdout empty", async () => {
-    const outputPath = `/tmp/extractor-tests/web-${Date.now()}.md`;
+    const outputPath = `/tmp/outform-tests/web-${Date.now()}.md`;
 
     await rm(outputPath, { force: true });
 
@@ -291,7 +309,7 @@ describe("CLI Content-Type PDF detection", () => {
 
 describe("CLI output file formats", () => {
   test("--json with --output writes JSON file", async () => {
-    const outputPath = `/tmp/extractor-tests/web-${Date.now()}.json`;
+    const outputPath = `/tmp/outform-tests/web-${Date.now()}.json`;
 
     await rm(outputPath, { force: true });
 
@@ -316,7 +334,7 @@ describe("CLI output file formats", () => {
   });
 
   test("--text with --output writes plain text file", async () => {
-    const outputPath = `/tmp/extractor-tests/web-${Date.now()}.txt`;
+    const outputPath = `/tmp/outform-tests/web-${Date.now()}.txt`;
 
     await rm(outputPath, { force: true });
 
@@ -396,7 +414,7 @@ describe("CLI stdout/stderr separation", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("# ");
     expect(stdout).toContain("## Content");
-    expect(stdout).not.toMatch(/^\/tmp\/extractor\//);
+    expect(stdout).not.toMatch(/^\/tmp\/outform\//);
     expect(stderr).toContain("→");
     expect(stderr).toContain("Detected type: web");
   });
@@ -445,7 +463,7 @@ describe("CLI doctor and setup", () => {
   test("setup remains a dry-run compatibility alias", async () => {
     const { stdout, exitCode } = await collect(run(["setup", "youtube"], NO_TOOLS_ENV));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor install youtube");
+    expect(stdout).toContain("outform install youtube");
     expect(stdout).toContain("Enable YouTube extraction");
     expect(stdout).toContain("yt-dlp");
     expect(stdout).toContain("Manual install options");
@@ -454,12 +472,12 @@ describe("CLI doctor and setup", () => {
   test("setup all remains a dry-run compatibility alias", async () => {
     const { stdout, exitCode } = await collect(run(["setup", "all"], NO_TOOLS_ENV));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("extractor install");
+    expect(stdout).toContain("outform install");
     expect(stdout).toContain("yt-dlp");
     expect(stdout).toContain("whisper.cpp");
     expect(stdout).toContain("claude CLI");
     expect(stdout).toContain("codex CLI");
-    expect(stdout).toContain("Run `extractor install` to install everything.");
+    expect(stdout).toContain("Run `outform install` to install everything.");
   });
 
   test("unknown install target exits 1 with a helpful error", async () => {

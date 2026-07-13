@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
 
 export type UrlType = "youtube" | "web" | "pdf";
 
@@ -44,6 +45,16 @@ export function isValidUrl(input: string): boolean {
   try {
     new URL(input);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function isValidSource(input: string): Promise<boolean> {
+  if (isValidUrl(input)) return true;
+
+  try {
+    return (await stat(input)).isFile();
   } catch {
     return false;
   }

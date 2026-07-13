@@ -1,13 +1,21 @@
 {
-  "name": "@zvadaadam/extractor",
+  "name": "outform",
   "version": "0.1.0",
-  "description": "curl for AI-ready content from any URL",
+  "description": "Turn any URL or local file into AI-ready Markdown, text, or JSON",
+  "keywords": [
+    "ai",
+    "cli",
+    "content-extraction",
+    "markdown",
+    "pdf",
+    "youtube"
+  ],
   "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "extractor": "dist/bin.js"
+    "outform": "dist/bin.js"
   },
   "exports": {
     ".": {
@@ -19,7 +27,7 @@
     "dist"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20.16.0 <21 || >=22.3.0"
   },
   "repository": {
     "type": "git",
@@ -31,6 +39,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "build:binary": "bun scripts/build-binary.ts",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "bun test"

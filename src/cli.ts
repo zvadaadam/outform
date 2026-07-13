@@ -12,7 +12,7 @@ import {
 } from "./utils/deps";
 import { createStderrLogger, log, logError, logSuccess } from "./utils/log";
 import { writeOutput } from "./output/formatter";
-import { isValidUrl } from "./utils/url";
+import { isValidSource } from "./utils/url";
 import {
   formatSetupPlan,
   formatSetupPlans,
@@ -23,24 +23,23 @@ import {
   runSetup,
   runSetupAll,
 } from "./setup";
-import { ExtractorError, unknownSetupTargetIssue } from "./errors";
-import { createRequire } from "node:module";
+import { OutformError, unknownSetupTargetIssue } from "./errors";
+import packageJson from "../package.json" with { type: "json" };
 
-const require = createRequire(import.meta.url);
-const { version } = require("../package.json");
+const { version } = packageJson;
 
 const HELP = `
-extractor - curl for AI-ready content
+outform - curl for AI-ready content
 
-Give it a URL. Get back clean content for humans, scripts, and coding agents.
+Give it a URL or file path. Get back clean content for humans, scripts, and coding agents.
 
 Usage:
-  extractor <url> [options]
-  extractor [options]      Read URL from stdin
-  extractor doctor [--json]
-  extractor install [target]
-  extractor --check
-  extractor --help
+  outform <source> [options]
+  outform [options]      Read a URL or file path from stdin
+  outform doctor [--json]
+  outform install [target]
+  outform --check
+  outform --help
 
 Default behavior:
   Prints AI-ready Markdown to stdout.
@@ -69,13 +68,15 @@ Compatibility:
   --stdout                 Alias for default stdout output
 
 Examples:
-  extractor 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
-  extractor --json 'https://example.com/article'
-  extractor --summarize 'https://example.com/article'
-  extractor doctor --json
-  extractor install
-  extractor install youtube
-  printf '%s\\n' 'https://example.com?a=1&b=2' | extractor
+  outform 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
+  outform --json 'https://example.com/article'
+  outform --summarize 'https://example.com/article'
+  outform ./report.pdf
+  outform ./notes.md
+  outform doctor --json
+  outform install
+  outform install youtube
+  printf '%s\\n' 'https://example.com?a=1&b=2' | outform
 `.trim();
 
 export interface CliOptions {
@@ -199,7 +200,7 @@ async function runSetupCommand(target: string | undefined, shouldRun: boolean): 
   }
 
   if (!isSetupTarget(target)) {
-    throw new ExtractorError(
+    throw new OutformError(
       unknownSetupTargetIssue(target, getSetupTargetLabels()),
     );
   }
@@ -249,7 +250,7 @@ export async function run(args: string[]): Promise<void> {
   }
 
   if (values.version) {
-    console.log(`extractor v${version}`);
+    console.log(`outform v${version}`);
     return;
   }
 
@@ -281,13 +282,13 @@ export async function run(args: string[]): Promise<void> {
   const url = positionals[0] ?? (await readUrlFromStdin());
   if (!url) {
     logError(
-      "No URL provided. Pass a quoted URL, or pipe one on stdin. Run `extractor --help` for usage.",
+      "No source provided. Pass a URL or file path, or pipe one on stdin. Run `outform --help` for usage.",
     );
     process.exit(1);
   }
 
-  if (!isValidUrl(url)) {
-    logError(`Invalid URL: ${url}`);
+  if (!(await isValidSource(url))) {
+    logError(`Invalid URL or file path: ${url}`);
     process.exit(1);
   }
 

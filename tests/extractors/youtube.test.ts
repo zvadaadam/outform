@@ -7,6 +7,8 @@ import {
 } from "../../src/output/formatter";
 import type { YouTubeResult } from "../../src/extractors/youtube";
 import { findWhisperModel } from "../../src/extractors/youtube";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const SAMPLE_RESULT: YouTubeResult = {
   title: "How to Build CLI Tools",
@@ -119,23 +121,23 @@ describe("YouTube JSON formatting", () => {
 describe("YouTube output path", () => {
   test("follows yt-{videoId}.md convention", () => {
     const path = getYouTubeOutputPath("dQw4w9WgXcQ");
-    expect(path).toBe("/tmp/extractor/yt-dQw4w9WgXcQ.md");
+    expect(path).toBe(join(tmpdir(), "outform", "yt-dQw4w9WgXcQ.md"));
   });
 
   test("uses .json extension for json format", () => {
     const path = getYouTubeOutputPath("dQw4w9WgXcQ", "json");
-    expect(path).toBe("/tmp/extractor/yt-dQw4w9WgXcQ.json");
+    expect(path).toBe(join(tmpdir(), "outform", "yt-dQw4w9WgXcQ.json"));
   });
 
   test("uses .txt extension for txt format", () => {
     const path = getYouTubeOutputPath("dQw4w9WgXcQ", "txt");
-    expect(path).toBe("/tmp/extractor/yt-dQw4w9WgXcQ.txt");
+    expect(path).toBe(join(tmpdir(), "outform", "yt-dQw4w9WgXcQ.txt"));
   });
 });
 
 describe("findWhisperModel", () => {
   test("returns env var path when WHISPER_MODEL is set and file exists", async () => {
-    const tmpPath = "/tmp/extractor-test-whisper-model.bin";
+    const tmpPath = "/tmp/outform-test-whisper-model.bin";
     await Bun.write(tmpPath, "fake model");
     const original = process.env.WHISPER_MODEL;
     process.env.WHISPER_MODEL = tmpPath;
@@ -165,7 +167,7 @@ describe("findWhisperModel", () => {
     const original = process.env.WHISPER_MODEL;
     const originalHome = process.env.HOME;
     delete process.env.WHISPER_MODEL;
-    process.env.HOME = "/tmp/extractor-fake-home-nonexistent";
+    process.env.HOME = "/tmp/outform-fake-home-nonexistent";
     try {
       const result = await findWhisperModel();
       expect(result).toBeNull();

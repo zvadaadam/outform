@@ -44,20 +44,20 @@ export async function detectProvider(
     );
   }
 
-  if (await hasCommand("claude")) {
-    return { type: "claude-cli", name: "Claude CLI" };
-  }
-
-  if (await hasCommand("codex")) {
-    return { type: "codex-cli", name: "Codex CLI" };
-  }
-
   if (process.env.ANTHROPIC_API_KEY) {
     return { type: "anthropic-api", name: "Anthropic API" };
   }
 
   if (process.env.OPENAI_API_KEY) {
     return { type: "openai-api", name: "OpenAI API" };
+  }
+
+  if (await hasCommand("claude")) {
+    return { type: "claude-cli", name: "Claude CLI" };
+  }
+
+  if (await hasCommand("codex")) {
+    return { type: "codex-cli", name: "Codex CLI" };
   }
 
   return { type: "none", name: "none" };

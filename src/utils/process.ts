@@ -21,6 +21,8 @@ export function spawn(
     stdout?: "pipe" | "inherit";
     stderr?: "pipe" | "inherit";
     stdin?: string;
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
   },
 ): Proc {
   const child = nodeSpawn(cmd[0]!, cmd.slice(1), {
@@ -29,6 +31,8 @@ export function spawn(
       opts?.stdout ?? "pipe",
       opts?.stderr ?? "pipe",
     ],
+    cwd: opts?.cwd,
+    env: opts?.env,
   });
 
   if (opts?.stdin !== undefined && child.stdin) {
