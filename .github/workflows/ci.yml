@@ -24,3 +24,13 @@ jobs:
 
       - name: Test
         run: bun test
+
+      - name: Build npm package
+        run: bun run build
+
+      - name: Build and smoke-test standalone binary
+        run: |
+          bun run build:binary -- --target bun-linux-x64
+          artifacts/outform-linux-x64 --version
+          artifacts/outform-linux-x64 README.md > /tmp/outform-readme.md
+          test -s /tmp/outform-readme.md

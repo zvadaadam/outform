@@ -1,4 +1,6 @@
-import { unlink, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Provider } from "./provider";
 import { logError, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
@@ -69,7 +71,17 @@ export async function summarize(
 }
 
 async function invokeClaude(content: string): Promise<string> {
-  const proc = spawn(["claude", "-p", SUMMARIZE_PROMPT.trim()], {
+  const proc = spawn([
+    "claude",
+    "--print",
+    "--safe-mode",
+    "--tools",
+    "",
+    "--no-session-persistence",
+    "--no-chrome",
+    "--disable-slash-commands",
+    SUMMARIZE_PROMPT.trim(),
+  ], {
     stdin: content,
     stdout: "pipe",
     stderr: "pipe",
@@ -89,16 +101,32 @@ async function invokeClaude(content: string): Promise<string> {
 }
 
 async function invokeCodex(content: string): Promise<string> {
-  const tmpOutput = `/tmp/extractor-codex-${Date.now()}.txt`;
+  const workDir = await mkdtemp(join(tmpdir(), "outform-codex-"));
+  const tmpOutput = join(workDir, "summary.txt");
   const fullPrompt = SUMMARIZE_PROMPT.trim() + "\n\n" + content;
 
   try {
     const proc = spawn(
-      ["codex", "exec", "-", "--ephemeral", "--skip-git-repo-check", "-o", tmpOutput],
+      [
+        "codex",
+        "exec",
+        "-",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "-C",
+        workDir,
+        "-o",
+        tmpOutput,
+      ],
       {
         stdin: fullPrompt,
         stdout: "pipe",
         stderr: "pipe",
+        cwd: workDir,
       },
     );
 
@@ -115,9 +143,7 @@ async function invokeCodex(content: string): Promise<string> {
     const output = await readFile(tmpOutput, "utf-8");
     return output.trim();
   } finally {
-    try {
-      await unlink(tmpOutput);
-    } catch {}
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 

@@ -1,7 +1,7 @@
-import { ExtractorError, setupFailedIssue } from "./errors";
+import { OutformError, setupFailedIssue } from "./errors";
 import type { SetupTarget } from "./utils/deps";
 import { hasCommand } from "./utils/deps";
-import { logProgress, logSuccess } from "./utils/log";
+import { logError, logProgress, logSuccess } from "./utils/log";
 import { spawn } from "./utils/process";
 
 interface SetupConfig {
@@ -110,7 +110,7 @@ export async function getSetupPlan(target: SetupTarget): Promise<SetupPlan> {
 export function formatSetupPlan(plan: SetupPlan): string {
   const lines: string[] = [];
 
-  lines.push(`extractor install ${plan.target}`);
+  lines.push(`outform install ${plan.target}`);
   lines.push("");
   lines.push(`  Purpose: ${plan.purpose}`);
   lines.push(`  Tool: ${plan.name}`);
@@ -124,7 +124,7 @@ export function formatSetupPlan(plan: SetupPlan): string {
 
   if (plan.autoInstallCommand) {
     lines.push(`  Automatic install: ${plan.autoInstallCommand.join(" ")}`);
-    lines.push(`  Run \`extractor install ${plan.target}\` to install it automatically.`);
+    lines.push(`  Run \`outform install ${plan.target}\` to install it automatically.`);
     lines.push("");
   }
 
@@ -143,7 +143,7 @@ export async function getSetupPlans(): Promise<SetupPlan[]> {
 export function formatSetupPlans(plans: SetupPlan[]): string {
   const lines: string[] = [];
 
-  lines.push("extractor install");
+  lines.push("outform install");
   lines.push("");
   lines.push("  Installs every supported optional tool:");
   lines.push("");
@@ -160,7 +160,7 @@ export function formatSetupPlans(plans: SetupPlan[]): string {
   }
 
   lines.push("");
-  lines.push("  Run `extractor install` to install everything.");
+  lines.push("  Run `outform install` to install everything.");
 
   return lines.join("\n");
 }
@@ -174,7 +174,7 @@ export async function runSetup(target: SetupTarget): Promise<void> {
   }
 
   if (!plan.autoInstallCommand) {
-    throw new ExtractorError(
+    throw new OutformError(
       setupFailedIssue({
         target: plan.target,
         name: plan.name,
@@ -193,7 +193,7 @@ export async function runSetup(target: SetupTarget): Promise<void> {
 
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    throw new ExtractorError(
+    throw new OutformError(
       setupFailedIssue({
         target: plan.target,
         name: plan.name,
@@ -206,8 +206,21 @@ export async function runSetup(target: SetupTarget): Promise<void> {
 }
 
 export async function runSetupAll(): Promise<void> {
+  const failures: string[] = [];
   for (const target of getSetupTargets()) {
-    await runSetup(target);
+    try {
+      await runSetup(target);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      failures.push(`${target}: ${message}`);
+      logError(message);
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(
+      `Could not install ${failures.length} optional tool${failures.length === 1 ? "" : "s"}. See the instructions above.`,
+    );
   }
 }
 

@@ -17,15 +17,15 @@ import {
 } from "./output/formatter";
 import { detectProvider } from "./ai/provider";
 import { summarize } from "./ai/summarize";
-import { detectUrlType, isValidUrl, type UrlType } from "./utils/url";
+import { detectUrlType, isValidSource, isValidUrl, type UrlType } from "./utils/url";
 import { probeEnvironment } from "./utils/deps";
 import {
-  ExtractorError,
+  OutformError,
   invalidOptionsIssue,
   invalidUrlIssue,
   missingDependencyIssue,
   noAiProviderIssue,
-  type ExtractorIssue,
+  type OutformIssue,
 } from "./errors";
 import { silentLogger, type ExtractLogger } from "./utils/log";
 
@@ -63,7 +63,7 @@ export interface InspectResult {
   ready: boolean;
   summarize: boolean;
   provider: ExtractProvider | "auto";
-  issues: ExtractorIssue[];
+  issues: OutformIssue[];
   capabilities: {
     extraction: InspectCapability;
     aiSummary: InspectCapability & {
@@ -96,7 +96,7 @@ const PROBE_HEADERS = {
 export async function resolveUrlType(url: string): Promise<UrlType> {
   let urlType = detectUrlType(url);
 
-  if (urlType !== "web") {
+  if (urlType !== "web" || !isValidUrl(url)) {
     return urlType;
   }
 
@@ -144,7 +144,7 @@ function getAiIssue(
   provider: ExtractProvider | undefined,
   url: string,
   urlType: UrlType,
-): ExtractorIssue | null {
+): OutformIssue | null {
   if (provider === "none") {
     return invalidOptionsIssue('Cannot summarize with provider "none". Choose claude, codex, or omit provider.');
   }
@@ -195,7 +195,7 @@ export async function inspect(
   url: string,
   options: InspectOptions = {},
 ): Promise<InspectResult> {
-  if (!isValidUrl(url)) {
+  if (!(await isValidSource(url))) {
     const issue = invalidUrlIssue(url);
     return {
       url,
@@ -224,7 +224,7 @@ export async function inspect(
   const summarizeRequested = options.summarize ?? false;
   const provider = options.provider ?? "auto";
   const report = await probeEnvironment();
-  const issues: ExtractorIssue[] = [];
+  const issues: OutformIssue[] = [];
 
   let extractionCapability: InspectCapability;
   switch (urlType) {
@@ -234,7 +234,7 @@ export async function inspect(
         available,
         capability: "youtube",
         dependency: available ? undefined : "yt-dlp",
-        setupCommand: available ? undefined : "extractor install youtube",
+        setupCommand: available ? undefined : "outform install youtube",
         installHints: available ? undefined : ["brew install yt-dlp", "pip install yt-dlp"],
       };
 
@@ -312,7 +312,7 @@ export async function extract(
 ): Promise<ExtractResult> {
   const inspection = await inspect(url, options);
   if (!inspection.ready) {
-    throw new ExtractorError(inspection.issues[0]!);
+    throw new OutformError(inspection.issues[0]!);
   }
 
   const logger = options.logger ?? silentLogger;
@@ -381,7 +381,7 @@ export async function extract(
       }
     }
   } catch (error: unknown) {
-    throw ExtractorError.fromUnknown(error, {
+    throw OutformError.fromUnknown(error, {
       code: "EXTRACTION_FAILED",
       message: `Failed to extract content from ${url}`,
       url,

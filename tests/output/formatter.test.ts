@@ -14,6 +14,8 @@ import {
 import type { WebResult } from "../../src/extractors/web";
 import type { PdfResult } from "../../src/extractors/pdf";
 import type { YouTubeResult } from "../../src/extractors/youtube";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const sampleResult: WebResult = {
   title: "Test Article",
@@ -79,7 +81,9 @@ describe("formatWebJson", () => {
 describe("getWebOutputPath", () => {
   test("generates correct path pattern", () => {
     const path = getWebOutputPath("https://example.com/article");
-    expect(path).toMatch(/^\/tmp\/extractor\/web-example\.com-[a-f0-9]{8}\.md$/);
+    expect(path).toMatch(
+      new RegExp(`^${join(tmpdir(), "outform", "web-example.com-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-f0-9]{8}\\.md$`),
+    );
   });
 
   test("strips www from domain", () => {
@@ -150,7 +154,9 @@ describe("formatPdfJson", () => {
 describe("getPdfOutputPath", () => {
   test("generates correct path pattern", () => {
     const path = getPdfOutputPath("https://arxiv.org/pdf/2301.00001.pdf");
-    expect(path).toMatch(/^\/tmp\/extractor\/pdf-[a-f0-9]{8}\.md$/);
+    expect(path).toMatch(
+      new RegExp(`^${join(tmpdir(), "outform", "pdf-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-f0-9]{8}\\.md$`),
+    );
   });
 
   test("different URLs produce different hashes", () => {

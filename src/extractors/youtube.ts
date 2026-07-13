@@ -3,11 +3,11 @@ import { spin } from "../utils/spinner";
 import { extractYouTubeId } from "../utils/url";
 import { hasCommand } from "../utils/deps";
 import { stripVttTimestamps, parseChapters, type Chapter } from "../utils/vtt";
-import { missingDependencyIssue, ExtractorError } from "../errors";
-import { spawn, waitForResult, fileExists, writeWithDirs } from "../utils/process";
+import { missingDependencyIssue, OutformError } from "../errors";
+import { spawn, waitForResult, fileExists } from "../utils/process";
 import { tmpdir } from "os";
 import { join } from "path";
-import { readdir, readFile, rm } from "fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "fs/promises";
 
 const WHISPER_COMMANDS = ["whisper-cpp", "whisper-cli"];
 
@@ -69,14 +69,8 @@ export async function extractYouTube(
 }
 
 async function ensureYtDlp(url: string): Promise<void> {
-  const proc = spawn(["which", "yt-dlp"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const exitCode = await proc.exited;
-
-  if (exitCode !== 0) {
-    throw new ExtractorError(
+  if (!(await hasCommand("yt-dlp"))) {
+    throw new OutformError(
       missingDependencyIssue({
         url,
         urlType: "youtube",
@@ -118,8 +112,7 @@ async function fetchCaptions(
   videoId: string,
   lang: string,
 ): Promise<string | null> {
-  const workDir = join(tmpdir(), `extractor-yt-${videoId}`);
-  await writeWithDirs(join(workDir, ".keep"), "");
+  const workDir = await mkdtemp(join(tmpdir(), `outform-yt-${videoId}-`));
 
   try {
     const proc = spawn(
@@ -176,8 +169,7 @@ async function whisperFallback(
     return null;
   }
 
-  const workDir = join(tmpdir(), `extractor-whisper-${videoId}`);
-  await writeWithDirs(join(workDir, ".keep"), "");
+  const workDir = await mkdtemp(join(tmpdir(), `outform-whisper-${videoId}-`));
 
   try {
     const audioPath = await downloadAudio(url, workDir, logger);

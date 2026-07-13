@@ -1,6 +1,6 @@
 import type { UrlType } from "./utils/url";
 
-export type ExtractorErrorCode =
+export type OutformErrorCode =
   | "INVALID_URL"
   | "INVALID_OPTIONS"
   | "MISSING_DEPENDENCY"
@@ -9,8 +9,8 @@ export type ExtractorErrorCode =
   | "SETUP_FAILED"
   | "EXTRACTION_FAILED";
 
-export interface ExtractorIssue {
-  code: ExtractorErrorCode;
+export interface OutformIssue {
+  code: OutformErrorCode;
   message: string;
   url?: string;
   urlType?: UrlType | null;
@@ -22,42 +22,42 @@ export interface ExtractorIssue {
   installHints?: string[];
 }
 
-export class ExtractorError extends Error {
-  code: ExtractorErrorCode;
-  issue: ExtractorIssue;
+export class OutformError extends Error {
+  code: OutformErrorCode;
+  issue: OutformIssue;
   override cause: unknown;
 
-  constructor(issue: ExtractorIssue, options?: { cause?: unknown }) {
+  constructor(issue: OutformIssue, options?: { cause?: unknown }) {
     super(issue.message);
-    this.name = "ExtractorError";
+    this.name = "OutformError";
     this.code = issue.code;
     this.issue = issue;
     this.cause = options?.cause;
   }
 
-  static fromUnknown(error: unknown, fallback: ExtractorIssue): ExtractorError {
-    if (error instanceof ExtractorError) {
+  static fromUnknown(error: unknown, fallback: OutformIssue): OutformError {
+    if (error instanceof OutformError) {
       return error;
     }
 
     if (error instanceof Error) {
-      return new ExtractorError({ ...fallback, message: error.message }, { cause: error });
+      return new OutformError({ ...fallback, message: error.message }, { cause: error });
     }
 
-    return new ExtractorError(fallback, { cause: error });
+    return new OutformError(fallback, { cause: error });
   }
 }
 
-export function invalidUrlIssue(url: string): ExtractorIssue {
+export function invalidUrlIssue(url: string): OutformIssue {
   return {
     code: "INVALID_URL",
-    message: `Invalid URL: ${url}`,
+    message: `Invalid URL or file path: ${url}`,
     url,
     capability: "input",
   };
 }
 
-export function invalidOptionsIssue(message: string): ExtractorIssue {
+export function invalidOptionsIssue(message: string): OutformIssue {
   return {
     code: "INVALID_OPTIONS",
     message,
@@ -73,7 +73,7 @@ export function missingDependencyIssue(input: {
   dependency: string;
   setupTarget: string;
   installHints: string[];
-}): ExtractorIssue {
+}): OutformIssue {
   return {
     code: "MISSING_DEPENDENCY",
     message:
@@ -84,7 +84,7 @@ export function missingDependencyIssue(input: {
     capability: input.capability,
     dependency: input.dependency,
     setupTarget: input.setupTarget,
-    setupCommand: `extractor install ${input.setupTarget}`,
+    setupCommand: `outform install ${input.setupTarget}`,
     installHints: input.installHints,
   };
 }
@@ -95,7 +95,7 @@ export function noAiProviderIssue(input: {
   url?: string;
   urlType?: UrlType | null;
   installHints?: string[];
-} = {}): ExtractorIssue {
+} = {}): OutformIssue {
   return {
     code: "NO_AI_PROVIDER",
     message:
@@ -107,8 +107,8 @@ export function noAiProviderIssue(input: {
     provider: input.provider,
     installHints:
       input.installHints ?? [
-        "extractor install claude",
-        "extractor install codex",
+        "outform install claude",
+        "outform install codex",
         "export ANTHROPIC_API_KEY=sk-...",
         "export OPENAI_API_KEY=sk-...",
       ],
@@ -118,7 +118,7 @@ export function noAiProviderIssue(input: {
 export function unknownSetupTargetIssue(
   target: string,
   availableTargets: string[],
-): ExtractorIssue {
+): OutformIssue {
   return {
     code: "UNKNOWN_SETUP_TARGET",
     message: `Unknown install target "${target}". Use one of: ${availableTargets.join(", ")}.`,
@@ -132,7 +132,7 @@ export function setupFailedIssue(input: {
   name: string;
   manualHints: string[];
   message?: string;
-}): ExtractorIssue {
+}): OutformIssue {
   return {
     code: "SETUP_FAILED",
     message:
@@ -141,7 +141,7 @@ export function setupFailedIssue(input: {
     capability: "setup",
     dependency: input.name,
     setupTarget: input.target,
-    setupCommand: `extractor install ${input.target}`,
+    setupCommand: `outform install ${input.target}`,
     installHints: input.manualHints,
   };
 }

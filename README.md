@@ -1,8 +1,8 @@
-# extractor
+# outform
 
-`extractor` is curl for AI-ready content.
+`outform` is curl for AI-ready content.
 
-Give it a URL and it returns clean Markdown, text, or JSON for humans, scripts, and coding agents. It detects web pages, PDFs, and YouTube videos automatically.
+Give it a URL or local file path and it returns clean Markdown, text, or JSON for humans, scripts, and coding agents. It detects web pages, PDFs, text, Markdown, and YouTube videos automatically.
 
 ## Installation
 
@@ -11,26 +11,30 @@ Give it a URL and it returns clean Markdown, text, or JSON for humans, scripts, 
 Install the CLI:
 
 ```bash
-npm install -g @zvadaadam/extractor
-extractor install
+npm install -g outform
+outform install
 ```
 
-`extractor install` installs the optional tools used for richer extraction, including YouTube captions, audio transcription fallback, and AI summaries when an automatic installer is available.
+`outform install` installs the optional tools used for richer extraction, including YouTube captions, audio transcription fallback, and AI summaries when an automatic installer is available.
 
 ### Project Installation
 
 For projects that want to pin the version in `package.json`:
 
 ```bash
-npm install @zvadaadam/extractor
-npx extractor install
+npm install outform
+npx outform install
 ```
 
-Then use it from package scripts, `npx extractor`, or the JS API.
+Then use it from package scripts, `npx outform`, or the JS API.
+
+### Standalone Binary
+
+Each GitHub release includes a single-file executable for macOS, Linux, and Windows. It contains the Bun runtime plus built-in web, local-file, and PDF extraction, so Bun and Node.js are not needed on the target machine.
 
 ### Requirements
 
-- Node.js 18+
+- Node.js 20.16+ or 22.3+ when installing from npm. The standalone binary does not require Node.js.
 - Web page extraction and PDF extraction work from the npm package alone.
 - YouTube extraction needs `yt-dlp`.
 - Audio transcription fallback needs `whisper.cpp`.
@@ -39,7 +43,7 @@ Then use it from package scripts, `npx extractor`, or the JS API.
 Check the current machine at any time:
 
 ```bash
-extractor doctor
+outform doctor
 ```
 
 ## Quick Start
@@ -47,68 +51,75 @@ extractor doctor
 Extract a web page as Markdown:
 
 ```bash
-extractor 'https://paulgraham.com/superlinear.html'
+outform 'https://paulgraham.com/superlinear.html'
+```
+
+Extract a local PDF, HTML, Markdown, or text file:
+
+```bash
+outform ./report.pdf
+outform ./notes.md
 ```
 
 Extract a YouTube video:
 
 ```bash
-extractor 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
+outform 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
 ```
 
 Write the result to a file:
 
 ```bash
-extractor --output video.md 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
+outform --output video.md 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
 ```
 
 Return structured JSON:
 
 ```bash
-extractor --json 'https://paulgraham.com/superlinear.html'
+outform --json 'https://paulgraham.com/superlinear.html'
 ```
 
 Return plain text:
 
 ```bash
-extractor --text 'https://paulgraham.com/superlinear.html'
+outform --text 'https://paulgraham.com/superlinear.html'
 ```
 
 Add an AI summary:
 
 ```bash
-extractor --summarize 'https://paulgraham.com/superlinear.html'
+outform --summarize 'https://paulgraham.com/superlinear.html'
 ```
 
 Pipe a URL on stdin:
 
 ```bash
-printf '%s\n' 'https://example.com?a=1&b=2' | extractor
+printf '%s\n' 'https://example.com?a=1&b=2' | outform
 ```
 
 ## Commands
 
 ```bash
-extractor <url>                 # Extract AI-ready Markdown
-extractor --json <url>          # Extract structured JSON
-extractor --text <url>          # Extract plain text
-extractor --summarize <url>     # Add an AI summary
-extractor --output file.md <url> # Write output to a file
-extractor doctor                # Check installed tools and capabilities
-extractor doctor --json         # Machine-readable environment report
-extractor install               # Install every supported optional tool
+outform <source>                  # Extract AI-ready Markdown
+outform --json <source>           # Extract structured JSON
+outform --text <source>           # Extract plain text
+outform --summarize <source>      # Add an AI summary
+outform --output file.md <source> # Write output to a file
+outform doctor                # Check installed tools and capabilities
+outform doctor --json         # Machine-readable environment report
+outform install               # Install every supported optional tool
 ```
 
 Advanced targeted installs are also available:
 
 ```bash
-extractor install youtube
-extractor install whisper
-extractor install claude
-extractor install codex
+outform install youtube
+outform install whisper
+outform install claude
+outform install codex
 ```
 
-If automatic installation is not available on your machine, `extractor install` prints the manual command to run.
+If automatic installation is not available on your machine, `outform install` prints the manual command to run.
 
 ## Options
 
@@ -134,9 +145,9 @@ Compatibility aliases retained for older scripts:
 
 ## Output Contract
 
-By default, `extractor` behaves like curl for content:
+By default, `outform` behaves like curl for content:
 
-- input: a URL as an argument or on stdin
+- input: a URL or file path as an argument or on stdin
 - output: AI-ready Markdown on stdout
 - logs: progress and status on stderr
 - AI: off by default; opt in with `--summarize`
@@ -144,13 +155,13 @@ By default, `extractor` behaves like curl for content:
 That means it composes cleanly with shell tools:
 
 ```bash
-extractor 'https://paulgraham.com/superlinear.html' > article.md
-extractor --json 'https://example.com/article' | jq .
+outform 'https://paulgraham.com/superlinear.html' > article.md
+outform --json 'https://example.com/article' | jq .
 ```
 
 ## Doctor
 
-`extractor doctor` reports:
+`outform doctor` reports:
 
 - installed tools
 - configured API keys
@@ -160,7 +171,7 @@ extractor --json 'https://example.com/article' | jq .
 For agents and scripts, use JSON:
 
 ```bash
-extractor doctor --json
+outform doctor --json
 ```
 
 ## JS API
@@ -169,29 +180,29 @@ Use the same extraction engine directly from Node.js or TypeScript:
 
 ```ts
 import {
-  ExtractorError,
+  OutformError,
   extract,
   getInstallPlan,
   inspect,
   probeEnvironment,
   render,
-} from "@zvadaadam/extractor";
+} from "outform";
 
-const url = "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s";
+const source = "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s";
 
-const inspection = await inspect(url);
+const inspection = await inspect(source);
 if (!inspection.ready) {
   console.log(inspection.issues);
 }
 
 try {
-  const result = await extract(url);
+  const result = await extract(source);
 
   console.log(result.type);
   console.log(result.markdown);
   console.log(render(result, "json"));
 } catch (error) {
-  if (error instanceof ExtractorError) {
+  if (error instanceof OutformError) {
     console.log(error.code);
     console.log(error.issue.setupCommand);
   }
@@ -201,14 +212,14 @@ const environment = await probeEnvironment();
 const installPlan = await getInstallPlan("youtube");
 ```
 
-`extract(url, options?)` returns an agent-friendly object:
+`extract(source, options?)` returns an agent-friendly object:
 
 - `type`, `title`, `source`, `summary`
 - `markdown` for AI-ready Markdown
 - `text` for plain text
 - `json` for structured data
 
-`inspect(url, options?)` returns a preflight result:
+`inspect(source, options?)` returns a preflight result:
 
 - detected `type`
 - `ready` boolean
@@ -220,20 +231,20 @@ const installPlan = await getInstallPlan("youtube");
 If YouTube extraction fails, run:
 
 ```bash
-extractor doctor
-extractor install
+outform doctor
+outform install
 ```
 
 If you only want the YouTube dependency:
 
 ```bash
-extractor install youtube
+outform install youtube
 ```
 
 If summaries do not run, either install a supported CLI:
 
 ```bash
-extractor install codex
+outform install codex
 ```
 
 or set an API key:
@@ -250,6 +261,7 @@ bun install
 bun run src/bin.ts 'https://example.com/article'
 bun test
 npm run build
+bun run build:binary
 ```
 
 ## License

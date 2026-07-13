@@ -1,8 +1,8 @@
 import { describe, test, expect } from "bun:test";
 
-const NO_TOOLS_ENV = { PATH: "/tmp/extractor-no-tools" };
+const NO_TOOLS_ENV = { PATH: "/tmp/outform-no-tools" };
 const NO_CAPABILITIES_ENV = {
-  PATH: "/tmp/extractor-no-tools",
+  PATH: "/tmp/outform-no-tools",
   ANTHROPIC_API_KEY: "",
   OPENAI_API_KEY: "",
 };
@@ -107,18 +107,18 @@ describe("JS API", () => {
     expect(parsed.type).toBe("youtube");
     expect(parsed.ready).toBe(false);
     expect(parsed.issues[0].code).toBe("MISSING_DEPENDENCY");
-    expect(parsed.issues[0].setupCommand).toBe("extractor install youtube");
+    expect(parsed.issues[0].setupCommand).toBe("outform install youtube");
   });
 
   test("extract() throws a typed error for missing YouTube dependency", async () => {
     const script = `
-      import { extract, ExtractorError } from "./src/index.ts";
+      import { extract, OutformError } from "./src/index.ts";
 
       try {
         await extract("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
         console.log(JSON.stringify({ ok: true }));
       } catch (error) {
-        if (error instanceof ExtractorError) {
+        if (error instanceof OutformError) {
           console.log(JSON.stringify({
             ok: false,
             code: error.code,
@@ -137,7 +137,7 @@ describe("JS API", () => {
     const parsed = JSON.parse(stdout);
     expect(parsed.ok).toBe(false);
     expect(parsed.code).toBe("MISSING_DEPENDENCY");
-    expect(parsed.setupCommand).toBe("extractor install youtube");
+    expect(parsed.setupCommand).toBe("outform install youtube");
     expect(parsed.dependency).toBe("yt-dlp");
   });
 

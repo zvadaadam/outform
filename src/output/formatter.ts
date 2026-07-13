@@ -4,8 +4,10 @@ import type { WebResult } from "../extractors/web"
 import type { PdfResult } from "../extractors/pdf"
 import type { YouTubeResult } from "../extractors/youtube"
 import { formatTimestamp } from "../utils/vtt"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
-const OUTPUT_DIR = "/tmp/extractor"
+const OUTPUT_DIR = join(tmpdir(), "outform")
 
 export interface WebJsonOutput {
   type: "web"

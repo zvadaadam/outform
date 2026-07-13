@@ -4,6 +4,9 @@ import TurndownService from "turndown";
 import { logProgress, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
 import { friendlyFetchError } from "../utils/fetch-error";
+import { readFile } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
+import { isValidUrl } from "../utils/url";
 
 export interface WebResult {
   title: string;
@@ -15,43 +18,65 @@ export interface WebResult {
 }
 
 export async function extractWeb(
-  url: string,
+  source: string,
   logger?: ExtractLogger,
 ): Promise<WebResult> {
-  const s = spin("Fetching page...", logger);
+  const remote = isValidUrl(source);
+  const s = spin(remote ? "Fetching page..." : "Reading file...", logger);
 
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch (e: any) {
-    s.stop("Fetch failed");
-    throw new Error(friendlyFetchError(url, e, "fetch"));
+  let content: string;
+  let normalizedSource = source;
+  if (remote) {
+    let response: Response;
+    try {
+      response = await fetch(source, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        redirect: "follow",
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (e: any) {
+      s.stop("Fetch failed");
+      throw new Error(friendlyFetchError(source, e, "fetch"));
+    }
+
+    if (!response.ok) {
+      s.stop("Fetch failed");
+      throw new Error(`Failed to fetch ${source}: ${response.status} ${response.statusText}`);
+    }
+
+    content = await response.text();
+  } else {
+    content = await readFile(source, "utf8");
+    normalizedSource = resolve(source);
   }
 
-  if (!response.ok) {
-    s.stop("Fetch failed");
-    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+  s.stop(remote ? "Page fetched" : "File read");
+
+  if (!remote && [".md", ".mdx", ".txt"].includes(extname(source).toLowerCase())) {
+    const title = basename(source).replace(/\.(?:md|mdx|txt)$/i, "");
+    return {
+      title,
+      author: null,
+      source: normalizedSource,
+      content: content.trim(),
+      textContent: content.trim(),
+      excerpt: null,
+    };
   }
 
-  const html = await response.text();
-  s.stop("Page fetched");
   logProgress("Parsing article content...", logger);
 
-  const { document } = parseHTML(html);
+  const { document } = parseHTML(content);
   const reader = new Readability(document as any);
   const article = reader.parse();
 
   if (!article || !article.content?.trim()) {
     throw new Error(
-      `Could not extract readable content from ${url}. The page may be JavaScript-rendered or require authentication.`,
+      `Could not extract readable content from ${source}. The page may be JavaScript-rendered or require authentication.`,
     );
   }
 
@@ -63,9 +88,9 @@ export async function extractWeb(
   const markdown = turndown.turndown(article.content).trim();
 
   return {
-    title: article.title || new URL(url).hostname,
+    title: article.title || (remote ? new URL(source).hostname : basename(source)),
     author: article.byline || null,
-    source: url,
+    source: normalizedSource,
     content: markdown,
     textContent: (article.textContent ?? "").trim(),
     excerpt: article.excerpt || null,
