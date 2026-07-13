@@ -107,13 +107,10 @@ const ENV_VARS: EnvVar[] = [
 ];
 
 export async function hasCommand(cmd: string): Promise<boolean> {
-  const pathValue = Object.entries(process.env).find(
-    ([key]) => key.toLowerCase() === "path",
-  )?.[1];
+  const pathValue = Object.entries(process.env).find(([key]) => key.toLowerCase() === "path")?.[1];
   const pathEntries = isAbsolute(cmd) ? [""] : (pathValue ?? "").split(delimiter);
-  const extensions = process.platform === "win32" && !extname(cmd)
-    ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";")
-    : [""];
+  const extensions =
+    process.platform === "win32" && !extname(cmd) ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";") : [""];
 
   for (const directory of pathEntries) {
     for (const extension of extensions) {
@@ -169,23 +166,19 @@ export async function probeEnvironment(): Promise<DoctorReport> {
         setupCommand: "outform install youtube",
       };
 
-  const aiSummary: CapabilityStatus = providers.length > 0
-    ? {
-        available: true,
-        status: "ready",
-        providers,
-      }
-    : {
-        available: false,
-        status: "needs_provider",
-        requires: [
-          "claude CLI",
-          "codex CLI",
-          "ANTHROPIC_API_KEY",
-          "OPENAI_API_KEY",
-        ],
-        providers: [],
-      };
+  const aiSummary: CapabilityStatus =
+    providers.length > 0
+      ? {
+          available: true,
+          status: "ready",
+          providers,
+        }
+      : {
+          available: false,
+          status: "needs_provider",
+          requires: ["claude CLI", "codex CLI", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"],
+          providers: [],
+        };
 
   const recommendedActions: string[] = [];
   if (!hasYtDlp) {
@@ -235,12 +228,8 @@ export function formatDoctorReport(report: DoctorReport): string {
   lines.push("");
 
   lines.push("  Tools:");
-  lines.push(
-    `  ${"Status".padEnd(statusWidth)} ${"Name".padEnd(14)} ${"Purpose".padEnd(28)} Install`,
-  );
-  lines.push(
-    `  ${"─".repeat(statusWidth)} ${"─".repeat(14)} ${"─".repeat(28)} ${"─".repeat(36)}`,
-  );
+  lines.push(`  ${"Status".padEnd(statusWidth)} ${"Name".padEnd(14)} ${"Purpose".padEnd(28)} Install`);
+  lines.push(`  ${"─".repeat(statusWidth)} ${"─".repeat(14)} ${"─".repeat(28)} ${"─".repeat(36)}`);
   for (const tool of report.tools) {
     const status = tool.found ? "✓ found" : "✗ missing";
     lines.push(
@@ -250,17 +239,11 @@ export function formatDoctorReport(report: DoctorReport): string {
 
   lines.push("");
   lines.push("  Environment:");
-  lines.push(
-    `  ${"Status".padEnd(statusWidth)} ${"Variable".padEnd(18)} ${"Purpose".padEnd(22)} Setup`,
-  );
-  lines.push(
-    `  ${"─".repeat(statusWidth)} ${"─".repeat(18)} ${"─".repeat(22)} ${"─".repeat(30)}`,
-  );
+  lines.push(`  ${"Status".padEnd(statusWidth)} ${"Variable".padEnd(18)} ${"Purpose".padEnd(22)} Setup`);
+  lines.push(`  ${"─".repeat(statusWidth)} ${"─".repeat(18)} ${"─".repeat(22)} ${"─".repeat(30)}`);
   for (const item of report.env) {
     const status = item.found ? "✓ set" : "✗ unset";
-    lines.push(
-      `  ${status.padEnd(statusWidth)} ${item.name.padEnd(18)} ${item.purpose.padEnd(22)} ${item.hint}`,
-    );
+    lines.push(`  ${status.padEnd(statusWidth)} ${item.name.padEnd(18)} ${item.purpose.padEnd(22)} ${item.hint}`);
   }
 
   lines.push("");

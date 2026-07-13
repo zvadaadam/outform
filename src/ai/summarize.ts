@@ -12,11 +12,7 @@ const SUMMARIZE_PROMPT =
 const MAX_CONTENT_LENGTH = 100_000;
 const AI_TIMEOUT_MS = 60_000;
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  label: string,
-  proc?: { kill(): void },
-): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, label: string, proc?: { kill(): void }): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -31,11 +27,7 @@ async function withTimeout<T>(
   }
 }
 
-export async function summarize(
-  content: string,
-  provider: Provider,
-  logger?: ExtractLogger,
-): Promise<string | null> {
+export async function summarize(content: string, provider: Provider, logger?: ExtractLogger): Promise<string | null> {
   if (provider.type === "none") return null;
 
   const truncated =
@@ -71,27 +63,26 @@ export async function summarize(
 }
 
 async function invokeClaude(content: string): Promise<string> {
-  const proc = spawn([
-    "claude",
-    "--print",
-    "--safe-mode",
-    "--tools",
-    "",
-    "--no-session-persistence",
-    "--no-chrome",
-    "--disable-slash-commands",
-    SUMMARIZE_PROMPT.trim(),
-  ], {
-    stdin: content,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const { exitCode, stdout, stderr } = await withTimeout(
-    waitForResult(proc),
-    "claude CLI",
-    proc,
+  const proc = spawn(
+    [
+      "claude",
+      "--print",
+      "--safe-mode",
+      "--tools",
+      "",
+      "--no-session-persistence",
+      "--no-chrome",
+      "--disable-slash-commands",
+      SUMMARIZE_PROMPT.trim(),
+    ],
+    {
+      stdin: content,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
   );
+
+  const { exitCode, stdout, stderr } = await withTimeout(waitForResult(proc), "claude CLI", proc);
 
   if (exitCode !== 0) {
     throw new Error(`claude CLI failed: ${stderr.trim() || "unknown error"}`);
@@ -130,11 +121,7 @@ async function invokeCodex(content: string): Promise<string> {
       },
     );
 
-    const { exitCode, stderr } = await withTimeout(
-      waitForResult(proc),
-      "codex CLI",
-      proc,
-    );
+    const { exitCode, stderr } = await withTimeout(waitForResult(proc), "codex CLI", proc);
 
     if (exitCode !== 0) {
       throw new Error(`codex CLI failed: ${stderr.trim() || "unknown error"}`);

@@ -1,10 +1,5 @@
 export * from "./api";
-export {
-  probeEnvironment,
-  getDoctorReport,
-  formatDoctorReport,
-  type DoctorReport,
-} from "./utils/deps";
+export { probeEnvironment, getDoctorReport, formatDoctorReport, type DoctorReport } from "./utils/deps";
 export {
   getInstallPlan,
   getInstallPlans,
@@ -25,14 +20,5 @@ export {
   type InstallPlan,
   type SetupPlan,
 } from "./setup";
-export {
-  createStderrLogger,
-  stderrLogger,
-  silentLogger,
-  type ExtractLogger,
-} from "./utils/log";
-export {
-  OutformError,
-  type OutformErrorCode,
-  type OutformIssue,
-} from "./errors";
+export { createStderrLogger, stderrLogger, silentLogger, type ExtractLogger } from "./utils/log";
+export { OutformError, type OutformErrorCode, type OutformIssue } from "./errors";

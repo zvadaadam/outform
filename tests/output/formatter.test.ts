@@ -71,9 +71,7 @@ describe("formatWebJson", () => {
     expect(parsed.title).toBe("Test Article");
     expect(parsed.author).toBe("John Doe");
     expect(parsed.source).toBe("https://example.com/article");
-    expect(parsed.content).toBe(
-      "This is the article body with **some** text content."
-    );
+    expect(parsed.content).toBe("This is the article body with **some** text content.");
     expect(parsed.excerpt).toBe("A short excerpt.");
   });
 });
@@ -82,7 +80,9 @@ describe("getWebOutputPath", () => {
   test("generates correct path pattern", () => {
     const path = getWebOutputPath("https://example.com/article");
     expect(path).toMatch(
-      new RegExp(`^${join(tmpdir(), "outform", "web-example.com-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-f0-9]{8}\\.md$`),
+      new RegExp(
+        `^${join(tmpdir(), "outform", "web-example.com-").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[a-f0-9]{8}\\.md$`,
+      ),
     );
   });
 

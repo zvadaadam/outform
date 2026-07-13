@@ -174,19 +174,28 @@ For agents and scripts, use JSON:
 outform doctor --json
 ```
 
+## Coding Agents
+
+outform is built to be driven by agents: stdout carries content only, logs go to stderr, `doctor --json` reports capabilities, and failures exit non-zero with actionable messages.
+
+The repo ships an [agent skill](skills/outform/SKILL.md) that teaches agents when and how to use the CLI. Install it with the [skills CLI](https://skills.sh):
+
+```bash
+npx skills add zvadaadam/extractor
+```
+
+Or copy it manually into your agent's skills directory, e.g. for Claude Code:
+
+```bash
+cp -r node_modules/outform/skills/outform .claude/skills/outform
+```
+
 ## JS API
 
 Use the same extraction engine directly from Node.js or TypeScript:
 
 ```ts
-import {
-  OutformError,
-  extract,
-  getInstallPlan,
-  inspect,
-  probeEnvironment,
-  render,
-} from "outform";
+import { OutformError, extract, getInstallPlan, inspect, probeEnvironment, render } from "outform";
 
 const source = "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s";
 

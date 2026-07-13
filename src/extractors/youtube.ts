@@ -21,11 +21,7 @@ export interface YouTubeResult {
   transcript: string;
 }
 
-export async function extractYouTube(
-  url: string,
-  lang: string = "en",
-  logger?: ExtractLogger,
-): Promise<YouTubeResult> {
+export async function extractYouTube(url: string, lang: string = "en", logger?: ExtractLogger): Promise<YouTubeResult> {
   const videoId = extractYouTubeId(url);
   if (!videoId) {
     throw new Error(`Could not extract YouTube video ID from: ${url}`);
@@ -107,11 +103,7 @@ async function fetchMetadata(url: string): Promise<Record<string, any>> {
   }
 }
 
-async function fetchCaptions(
-  url: string,
-  videoId: string,
-  lang: string,
-): Promise<string | null> {
+async function fetchCaptions(url: string, videoId: string, lang: string): Promise<string | null> {
   const workDir = await mkdtemp(join(tmpdir(), `outform-yt-${videoId}-`));
 
   try {
@@ -147,11 +139,7 @@ async function fetchCaptions(
   }
 }
 
-async function whisperFallback(
-  url: string,
-  videoId: string,
-  logger?: ExtractLogger,
-): Promise<string | null> {
+async function whisperFallback(url: string, videoId: string, logger?: ExtractLogger): Promise<string | null> {
   const whisperCommand = await resolveWhisperCommand();
   if (!whisperCommand) {
     logError("whisper-cpp not found — cannot transcribe audio", logger);
@@ -191,22 +179,10 @@ async function resolveWhisperCommand(): Promise<string | null> {
   return null;
 }
 
-async function downloadAudio(
-  url: string,
-  workDir: string,
-  logger?: ExtractLogger,
-): Promise<string | null> {
+async function downloadAudio(url: string, workDir: string, logger?: ExtractLogger): Promise<string | null> {
   const s = spin("Downloading audio for transcription...", logger);
   const proc = spawn(
-    [
-      "yt-dlp",
-      "--extract-audio",
-      "--audio-format",
-      "wav",
-      "-o",
-      join(workDir, "audio.%(ext)s"),
-      url,
-    ],
+    ["yt-dlp", "--extract-audio", "--audio-format", "wav", "-o", join(workDir, "audio.%(ext)s"), url],
     { stdout: "pipe", stderr: "pipe" },
   );
 

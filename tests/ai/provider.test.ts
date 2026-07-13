@@ -23,9 +23,7 @@ describe("detectProvider", () => {
   });
 
   test("throws on unknown forced provider", async () => {
-    await expect(detectProvider("gpt")).rejects.toThrow(
-      'Unknown provider "gpt"'
-    );
+    await expect(detectProvider("gpt")).rejects.toThrow('Unknown provider "gpt"');
   });
 
   test("raw=true overrides forced provider", async () => {
@@ -43,9 +41,7 @@ describe("detectProvider", () => {
       expect(provider.name).toBe("Anthropic API");
     }
     // Otherwise it found a CLI tool, which is fine
-    expect(["claude-cli", "codex-cli", "anthropic-api"]).toContain(
-      provider.type
-    );
+    expect(["claude-cli", "codex-cli", "anthropic-api"]).toContain(provider.type);
   });
 
   test("detects OPENAI_API_KEY when no other providers", async () => {

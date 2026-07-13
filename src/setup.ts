@@ -150,9 +150,7 @@ export function formatSetupPlans(plans: SetupPlan[]): string {
 
   for (const plan of plans) {
     const status = plan.installed ? "already installed" : "missing";
-    const install = plan.autoInstallCommand
-      ? plan.autoInstallCommand.join(" ")
-      : plan.manualHints.join(" | ");
+    const install = plan.autoInstallCommand ? plan.autoInstallCommand.join(" ") : plan.manualHints.join(" | ");
 
     lines.push(`  - ${plan.name}: ${status}`);
     lines.push(`    ${plan.purpose}`);

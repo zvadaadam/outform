@@ -87,9 +87,7 @@ part of a sentence.
 And this is another.`;
 
     const result = stripVttTimestamps(vtt);
-    expect(result).toBe(
-      "This is the first part of a sentence.\n\nAnd this is another."
-    );
+    expect(result).toBe("This is the first part of a sentence.\n\nAnd this is another.");
   });
 
   test("handles empty input", () => {

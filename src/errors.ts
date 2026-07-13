@@ -89,13 +89,15 @@ export function missingDependencyIssue(input: {
   };
 }
 
-export function noAiProviderIssue(input: {
-  message?: string;
-  provider?: string;
-  url?: string;
-  urlType?: UrlType | null;
-  installHints?: string[];
-} = {}): OutformIssue {
+export function noAiProviderIssue(
+  input: {
+    message?: string;
+    provider?: string;
+    url?: string;
+    urlType?: UrlType | null;
+    installHints?: string[];
+  } = {},
+): OutformIssue {
   return {
     code: "NO_AI_PROVIDER",
     message:
@@ -105,20 +107,16 @@ export function noAiProviderIssue(input: {
     urlType: input.urlType,
     capability: "aiSummary",
     provider: input.provider,
-    installHints:
-      input.installHints ?? [
-        "outform install claude",
-        "outform install codex",
-        "export ANTHROPIC_API_KEY=sk-...",
-        "export OPENAI_API_KEY=sk-...",
-      ],
+    installHints: input.installHints ?? [
+      "outform install claude",
+      "outform install codex",
+      "export ANTHROPIC_API_KEY=sk-...",
+      "export OPENAI_API_KEY=sk-...",
+    ],
   };
 }
 
-export function unknownSetupTargetIssue(
-  target: string,
-  availableTargets: string[],
-): OutformIssue {
+export function unknownSetupTargetIssue(target: string, availableTargets: string[]): OutformIssue {
   return {
     code: "UNKNOWN_SETUP_TARGET",
     message: `Unknown install target "${target}". Use one of: ${availableTargets.join(", ")}.`,
@@ -135,9 +133,7 @@ export function setupFailedIssue(input: {
 }): OutformIssue {
   return {
     code: "SETUP_FAILED",
-    message:
-      input.message ??
-      `${input.name} install failed. Try manually: ${input.manualHints.join(" | ")}`,
+    message: input.message ?? `${input.name} install failed. Try manually: ${input.manualHints.join(" | ")}`,
     capability: "setup",
     dependency: input.name,
     setupTarget: input.target,

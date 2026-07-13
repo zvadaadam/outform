@@ -66,9 +66,7 @@ export interface Chapter {
   endTime?: number;
 }
 
-export function parseChapters(
-  metadata: Record<string, any>
-): Chapter[] | null {
+export function parseChapters(metadata: Record<string, any>): Chapter[] | null {
   const chapters = metadata.chapters;
   if (!Array.isArray(chapters) || chapters.length === 0) return null;
 

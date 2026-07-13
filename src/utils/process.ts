@@ -26,11 +26,7 @@ export function spawn(
   },
 ): Proc {
   const child = nodeSpawn(cmd[0]!, cmd.slice(1), {
-    stdio: [
-      opts?.stdin !== undefined ? "pipe" : "ignore",
-      opts?.stdout ?? "pipe",
-      opts?.stderr ?? "pipe",
-    ],
+    stdio: [opts?.stdin !== undefined ? "pipe" : "ignore", opts?.stdout ?? "pipe", opts?.stderr ?? "pipe"],
     cwd: opts?.cwd,
     env: opts?.env,
   });
@@ -50,9 +46,7 @@ export function spawn(
   };
 }
 
-export async function collectText(
-  stream: NodeJS.ReadableStream | null,
-): Promise<string> {
+export async function collectText(stream: NodeJS.ReadableStream | null): Promise<string> {
   if (!stream) return "";
   const chunks: Buffer[] = [];
   for await (const chunk of stream) {
@@ -64,11 +58,7 @@ export async function collectText(
 export async function waitForResult(proc: Proc): Promise<ProcResult> {
   const stdoutPromise = collectText(proc.stdout);
   const stderrPromise = collectText(proc.stderr);
-  const [exitCode, stdout, stderr] = await Promise.all([
-    proc.exited,
-    stdoutPromise,
-    stderrPromise,
-  ]);
+  const [exitCode, stdout, stderr] = await Promise.all([proc.exited, stdoutPromise, stderrPromise]);
 
   return {
     stdout,
@@ -86,10 +76,7 @@ export async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-export async function writeWithDirs(
-  path: string,
-  content: string,
-): Promise<void> {
+export async function writeWithDirs(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content);
 }

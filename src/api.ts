@@ -169,8 +169,7 @@ function getAiIssue(
       setupTarget: "claude",
       installHints: ["npm install -g @anthropic-ai/claude-code"],
       message:
-        "Claude CLI is not available for summaries. Install it with:\n" +
-        "  npm install -g @anthropic-ai/claude-code",
+        "Claude CLI is not available for summaries. Install it with:\n" + "  npm install -g @anthropic-ai/claude-code",
     });
   }
 
@@ -182,19 +181,14 @@ function getAiIssue(
       dependency: "codex CLI",
       setupTarget: "codex",
       installHints: ["npm install -g @openai/codex"],
-      message:
-        "Codex CLI is not available for summaries. Install it with:\n" +
-        "  npm install -g @openai/codex",
+      message: "Codex CLI is not available for summaries. Install it with:\n" + "  npm install -g @openai/codex",
     });
   }
 
   return null;
 }
 
-export async function inspect(
-  url: string,
-  options: InspectOptions = {},
-): Promise<InspectResult> {
+export async function inspect(url: string, options: InspectOptions = {}): Promise<InspectResult> {
   if (!(await isValidSource(url))) {
     const issue = invalidUrlIssue(url);
     return {
@@ -306,10 +300,7 @@ export async function inspect(
   };
 }
 
-export async function extract(
-  url: string,
-  options: ExtractOptions = {},
-): Promise<ExtractResult> {
+export async function extract(url: string, options: ExtractOptions = {}): Promise<ExtractResult> {
   const inspection = await inspect(url, options);
   if (!inspection.ready) {
     throw new OutformError(inspection.issues[0]!);
@@ -327,9 +318,7 @@ export async function extract(
     switch (urlType) {
       case "web": {
         const result = await extractWeb(url, logger);
-        const aiSummary = summarizeRequested
-          ? await summarize(result.content, provider, logger)
-          : null;
+        const aiSummary = summarizeRequested ? await summarize(result.content, provider, logger) : null;
         const json = buildWebJson(result, aiSummary);
 
         return {
@@ -345,9 +334,7 @@ export async function extract(
       }
       case "youtube": {
         const result = await extractYouTube(url, lang, logger);
-        const aiSummary = summarizeRequested
-          ? await summarize(result.transcript, provider, logger)
-          : null;
+        const aiSummary = summarizeRequested ? await summarize(result.transcript, provider, logger) : null;
         const json = buildYouTubeJson(result, aiSummary);
 
         return {
@@ -363,9 +350,7 @@ export async function extract(
       }
       case "pdf": {
         const result = await extractPdf(url, logger);
-        const aiSummary = summarizeRequested
-          ? await summarize(result.content, provider, logger)
-          : null;
+        const aiSummary = summarizeRequested ? await summarize(result.content, provider, logger) : null;
         const json = buildPdfJson(result, aiSummary);
 
         return {

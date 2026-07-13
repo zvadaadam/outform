@@ -34,15 +34,11 @@ function argument(name: string): string | undefined {
 
 const requestedTarget = argument("--target") ?? currentTarget();
 if (!targets.includes(requestedTarget as CompileTarget)) {
-  throw new Error(
-    `Unsupported target "${requestedTarget}". Use one of: ${targets.join(", ")}`,
-  );
+  throw new Error(`Unsupported target "${requestedTarget}". Use one of: ${targets.join(", ")}`);
 }
 
 const target = requestedTarget as CompileTarget;
-const defaultName = `outform-${target.replace(/^bun-/, "")}${
-  target.startsWith("bun-windows") ? ".exe" : ""
-}`;
+const defaultName = `outform-${target.replace(/^bun-/, "")}${target.startsWith("bun-windows") ? ".exe" : ""}`;
 const outfile = resolve(argument("--outfile") ?? `artifacts/${defaultName}`);
 await mkdir(dirname(outfile), { recursive: true });
 
