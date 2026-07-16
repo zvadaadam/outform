@@ -18,7 +18,7 @@ import {
 import { detectProvider } from "./ai/provider";
 import { summarize } from "./ai/summarize";
 import { detectUrlType, isValidSource, isValidUrl, type UrlType } from "./utils/url";
-import { probeEnvironment } from "./utils/deps";
+import { installHintsFor, probeEnvironment } from "./utils/deps";
 import {
   OutformError,
   invalidOptionsIssue,
@@ -224,12 +224,13 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
   switch (urlType) {
     case "youtube": {
       const available = report.capabilities.youtube.available;
+      const hints = installHintsFor("youtube");
       extractionCapability = {
         available,
         capability: "youtube",
         dependency: available ? undefined : "yt-dlp",
         setupCommand: available ? undefined : "outform install youtube",
-        installHints: available ? undefined : ["brew install yt-dlp", "pip install yt-dlp"],
+        installHints: available ? undefined : hints,
       };
 
       if (!available) {
@@ -240,11 +241,10 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
             capability: "youtube",
             dependency: "yt-dlp",
             setupTarget: "youtube",
-            installHints: ["brew install yt-dlp", "pip install yt-dlp"],
+            installHints: hints,
             message:
-              "yt-dlp is required for YouTube extraction. Install it with:\n" +
-              "  brew install yt-dlp\n" +
-              "  # or: pip install yt-dlp",
+              "yt-dlp is required for YouTube extraction. Run `outform install youtube` to install it automatically, or use:\n" +
+              hints.map((hint) => `  ${hint}`).join("\n"),
           }),
         );
       }

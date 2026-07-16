@@ -15,6 +15,20 @@ This is a test.`;
     expect(result).toBe("Hello world.\n\nThis is a test.");
   });
 
+  test("strips VTT header metadata lines like Kind and Language", () => {
+    const vtt = `WEBVTT
+Kind: captions
+Language: en
+
+00:00:00.320 --> 00:00:02.879
+Flow matching is the newest paradigm.`;
+
+    const result = stripVttTimestamps(vtt);
+    expect(result).toBe("Flow matching is the newest paradigm.");
+    expect(result).not.toContain("Kind:");
+    expect(result).not.toContain("Language:");
+  });
+
   test("strips SRT timestamps and indices", () => {
     const srt = `1
 00:00:00,000 --> 00:00:02,000

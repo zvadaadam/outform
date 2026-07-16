@@ -73,10 +73,12 @@ describe("CLI flags", () => {
     expect(stderr).toContain("Environment:");
     expect(stderr).toContain("ANTHROPIC_API_KEY");
     expect(stderr).toContain("OPENAI_API_KEY");
+    expect(stderr).toContain("ffmpeg");
     expect(stderr).toContain("Capabilities:");
     expect(stderr).toContain("Web page extraction");
     expect(stderr).toContain("PDF extraction");
     expect(stderr).toContain("YouTube extraction");
+    expect(stderr).toContain("Audio transcription");
     expect(stderr).toContain("AI summarization");
   });
 });
@@ -153,7 +155,7 @@ describe("CLI YouTube handling", () => {
     expect(exitCode).toBe(1);
     expect(stderr).toContain("Detected type: youtube");
     expect(stderr).toContain("yt-dlp");
-    expect(stderr).toContain("brew install");
+    expect(stderr).toContain("outform install youtube");
   });
 
   test("--lang flag is accepted and passed to YouTube extractor", async () => {
@@ -389,14 +391,19 @@ describe("CLI doctor and setup", () => {
   });
 
   test("install without a target installs every dependency by default", async () => {
-    const fakeTools = await createFakeToolPath(["yt-dlp", "whisper-cli", "claude", "codex"]);
+    const fakeTools = await createFakeToolPath(["yt-dlp", "whisper-cli", "ffmpeg", "claude", "codex"]);
+    const fakeModel = join(fakeTools.dir, "ggml-base.en.bin");
+    await writeFile(fakeModel, "fake model");
 
     try {
-      const { stdout, stderr, exitCode } = await collect(run(["install"], { PATH: fakeTools.path }));
+      const { stdout, stderr, exitCode } = await collect(
+        run(["install"], { PATH: fakeTools.path, WHISPER_MODEL: fakeModel }),
+      );
       expect(exitCode).toBe(0);
       expect(stdout).toBe("");
       expect(stderr).toContain("yt-dlp is already installed");
       expect(stderr).toContain("whisper.cpp is already installed");
+      expect(stderr).toContain("ffmpeg is already installed");
       expect(stderr).toContain("claude CLI is already installed");
       expect(stderr).toContain("codex CLI is already installed");
     } finally {
