@@ -32,11 +32,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zvadaadam/extractor.git"
+    "url": "git+https://github.com/zvadaadam/outform.git"
   },
-  "homepage": "https://github.com/zvadaadam/extractor#readme",
+  "homepage": "https://github.com/zvadaadam/outform#readme",
   "bugs": {
-    "url": "https://github.com/zvadaadam/extractor/issues"
+    "url": "https://github.com/zvadaadam/outform/issues"
   },
   "scripts": {
     "build": "tsup",

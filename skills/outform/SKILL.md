@@ -12,7 +12,7 @@ Output contract: content on stdout, logs and progress on stderr, non-zero exit c
 ## Availability
 
 ```bash
-outform --version || npm install -g outform
+outform --version || npm install -g outform   # or one-off: npx outform <source>
 ```
 
 Web pages, PDFs, and local files work out of the box. For everything else, check capabilities with a machine-readable report:
@@ -64,9 +64,9 @@ printf '%s\n' 'https://example.com?a=1&b=2' | outform
 
 ## Optional capabilities
 
-- YouTube extraction needs `yt-dlp`; audio transcription fallback needs `whisper.cpp`.
+- YouTube extraction needs `yt-dlp`; the audio transcription fallback needs `whisper.cpp`, `ffmpeg`, and a whisper model.
 - `--summarize` needs the `claude` or `codex` CLI, or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
-- Install optional tools automatically: `outform install` (all) or `outform install youtube|whisper|claude|codex`.
+- Install optional tools automatically: `outform install` (all) or `outform install youtube|whisper|ffmpeg|claude|codex`. Installs are platform-aware: Homebrew on macOS, standalone binary / model downloads on Linux.
 - Missing tools never crash the run for other source types; `outform doctor --json` reports exactly what is available.
 
 ## JS API

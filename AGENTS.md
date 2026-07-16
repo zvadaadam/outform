@@ -23,7 +23,7 @@ bun run src/bin.ts <source>   # run the CLI from source
 - `src/output/formatter.ts` — Markdown/text/JSON rendering per source type.
 - `src/ai/` — provider auto-detection and summarization.
 - `src/setup.ts` — `outform install` planning and execution. `src/errors.ts` — `OutformError` with structured issues.
-- `src/utils/` — dependency probing/doctor, URL/source detection, subprocess handling, stderr logging.
+- `src/utils/` — dependency probing/doctor, install hints, URL/source detection, subprocess handling, file downloads, stderr logging.
 - `tests/` mirrors `src/`.
 - `skills/outform/SKILL.md` — agent-facing usage skill, shipped in the npm package.
 
@@ -40,4 +40,4 @@ bun run src/bin.ts <source>   # run the CLI from source
 
 - CI (`.github/workflows/ci.yml`) runs format check, typecheck, tests, npm build, and a binary smoke test on every PR.
 - Publishing is tag-driven via `.github/workflows/release.yml`: pushing `v*` publishes to npm and uploads standalone binaries to the GitHub release.
-- The GitHub repo is named `extractor` for historical reasons; the product, package, CLI, and API are `outform`.
+- The GitHub repo is `zvadaadam/outform` (renamed from `extractor`; old URLs redirect).
