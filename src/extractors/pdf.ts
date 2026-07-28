@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { isValidUrl } from "../utils/url";
 
-type PDFParseConstructor = typeof import("pdf-parse")["PDFParse"];
+type PDFParseConstructor = (typeof import("pdf-parse"))["PDFParse"];
 
 let pdfRuntime: Promise<PDFParseConstructor> | undefined;
 
@@ -19,14 +19,7 @@ class TextOnlyDOMMatrix {
 
   constructor(values?: number[]) {
     if (values?.length === 6) {
-      [this.a, this.b, this.c, this.d, this.e, this.f] = values as [
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-      ];
+      [this.a, this.b, this.c, this.d, this.e, this.f] = values as [number, number, number, number, number, number];
     }
   }
 }
@@ -59,9 +52,7 @@ async function loadPdfRuntime(): Promise<PDFParseConstructor> {
       // Bun executables cannot resolve pdf.js's adjacent worker file from the
       // embedded filesystem. Embed the worker as a data URL only in that case;
       // regular Node/Bun installs can use pdf.js's normal file resolution.
-      const isBunExecutable =
-        "bun" in process.versions &&
-        !/(^|[/\\])bun(?:\.exe)?$/i.test(process.execPath);
+      const isBunExecutable = "bun" in process.versions && !/(^|[/\\])bun(?:\.exe)?$/i.test(process.execPath);
       if (isBunExecutable) {
         const { getData } = await import("pdf-parse/worker");
         PDFParse.setWorker(getData());
@@ -82,10 +73,7 @@ export interface PdfResult {
   content: string;
 }
 
-export async function extractPdf(
-  source: string,
-  logger?: ExtractLogger,
-): Promise<PdfResult> {
+export async function extractPdf(source: string, logger?: ExtractLogger): Promise<PdfResult> {
   const remote = isValidUrl(source);
   const s = spin(remote ? "Downloading PDF..." : "Reading PDF...", logger);
 
@@ -145,9 +133,7 @@ export async function extractPdf(
   const content = textResult.text.trim();
 
   if (!content) {
-    throw new Error(
-      "Could not extract text from PDF. The file may be scanned/image-based.",
-    );
+    throw new Error("Could not extract text from PDF. The file may be scanned/image-based.");
   }
 
   const title = infoResult.info?.Title || filenameFromSource(source) || "Untitled PDF";
@@ -163,9 +149,7 @@ export async function extractPdf(
 
 function filenameFromSource(source: string): string {
   try {
-    const filename = isValidUrl(source)
-      ? new URL(source).pathname.split("/").pop() || ""
-      : basename(source);
+    const filename = isValidUrl(source) ? new URL(source).pathname.split("/").pop() || "" : basename(source);
     return filename.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
   } catch {
     return "";

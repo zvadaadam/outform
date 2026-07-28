@@ -24,30 +24,37 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "skills"
   ],
   "engines": {
     "node": ">=20.16.0 <21 || >=22.3.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zvadaadam/extractor.git"
+    "url": "git+https://github.com/zvadaadam/outform.git"
   },
-  "homepage": "https://github.com/zvadaadam/extractor#readme",
+  "homepage": "https://github.com/zvadaadam/outform#readme",
   "bugs": {
-    "url": "https://github.com/zvadaadam/extractor/issues"
+    "url": "https://github.com/zvadaadam/outform/issues"
   },
   "scripts": {
     "build": "tsup",
     "build:binary": "bun scripts/build-binary.ts",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "bun test"
+  },
+  "prettier": {
+    "printWidth": 120
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/pdf-parse": "^1.1.5",
     "@types/turndown": "^5.0.6",
+    "prettier": "3.6.2",
     "tsup": "^8",
     "typescript": "^5"
   },

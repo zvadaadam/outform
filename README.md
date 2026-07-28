@@ -6,16 +6,53 @@ Give it a URL or local file path and it returns clean Markdown, text, or JSON fo
 
 ## Installation
 
-### Global Installation
-
-Install the CLI:
-
 ```bash
 npm install -g outform
-outform install
 ```
 
-`outform install` installs the optional tools used for richer extraction, including YouTube captions, audio transcription fallback, and AI summaries when an automatic installer is available.
+Web pages, PDFs, and local files work immediately — no other tools needed:
+
+```bash
+outform 'https://paulgraham.com/superlinear.html'
+```
+
+You can also run it once without installing anything:
+
+```bash
+npx outform 'https://paulgraham.com/superlinear.html'
+```
+
+**YouTube needs one extra step.** Video extraction relies on `yt-dlp`, which outform installs for you:
+
+```bash
+outform install youtube
+outform 'https://www.youtube.com/watch?v=3mFNpeJQjmw'
+```
+
+Requires Node.js 20.16+ or 22.3+ (the [standalone binary](#standalone-binary) needs no Node.js at all).
+
+### Optional capabilities
+
+YouTube extraction, audio transcription, and AI summaries use external tools. Check what your machine can do, then install only what you want:
+
+```bash
+outform doctor             # capability report (--json for machines)
+outform install youtube    # YouTube extraction (yt-dlp)
+outform install whisper    # transcription fallback (whisper.cpp + base.en model)
+outform install ffmpeg     # audio extraction for the whisper fallback
+outform install claude     # AI summaries via the claude CLI
+outform install codex      # AI summaries via the codex CLI
+outform install            # everything above at once
+```
+
+Installs are platform-aware:
+
+- macOS uses Homebrew when available.
+- Linux downloads the standalone `yt-dlp` binary into `/usr/local/bin` or `~/.local/bin`, and uses apt for ffmpeg when running as root.
+- `outform install whisper` downloads the `ggml-base.en.bin` model into `~/.cache/whisper/` on every platform. The `whisper.cpp` binary has no prebuilt Linux package; outform prints the source-build commands (including the `-DGGML_NATIVE=OFF` flag needed on some toolchains).
+- AI summaries also work with just `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set — no CLI needed.
+
+If automatic installation is not available on your machine, `outform install` prints the exact manual commands to run.
 
 ### Project Installation
 
@@ -23,28 +60,21 @@ For projects that want to pin the version in `package.json`:
 
 ```bash
 npm install outform
-npx outform install
 ```
 
 Then use it from package scripts, `npx outform`, or the JS API.
 
 ### Standalone Binary
 
-Each GitHub release includes a single-file executable for macOS, Linux, and Windows. It contains the Bun runtime plus built-in web, local-file, and PDF extraction, so Bun and Node.js are not needed on the target machine.
-
-### Requirements
-
-- Node.js 20.16+ or 22.3+ when installing from npm. The standalone binary does not require Node.js.
-- Web page extraction and PDF extraction work from the npm package alone.
-- YouTube extraction needs `yt-dlp`.
-- Audio transcription fallback needs `whisper.cpp`.
-- AI summaries need `claude`, `codex`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`.
-
-Check the current machine at any time:
+Each GitHub release ships single-file executables for macOS, Linux (glibc and musl), and Windows with SHA-256 checksums. They bundle the runtime plus built-in web, local-file, and PDF extraction — no Node.js required:
 
 ```bash
-outform doctor
+curl -fsSL -o /usr/local/bin/outform \
+  'https://github.com/zvadaadam/outform/releases/latest/download/outform-darwin-arm64'
+chmod +x /usr/local/bin/outform
 ```
+
+Swap the asset name for your platform: `outform-darwin-arm64`, `outform-darwin-x64`, `outform-linux-x64`, `outform-linux-arm64`, `outform-linux-x64-musl`, or `outform-windows-x64.exe`.
 
 ## Quick Start
 
@@ -61,7 +91,7 @@ outform ./report.pdf
 outform ./notes.md
 ```
 
-Extract a YouTube video:
+Extract a YouTube video (run `outform install youtube` once first):
 
 ```bash
 outform 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
@@ -105,21 +135,10 @@ outform --json <source>           # Extract structured JSON
 outform --text <source>           # Extract plain text
 outform --summarize <source>      # Add an AI summary
 outform --output file.md <source> # Write output to a file
-outform doctor                # Check installed tools and capabilities
-outform doctor --json         # Machine-readable environment report
-outform install               # Install every supported optional tool
+outform doctor                    # Check installed tools and capabilities
+outform doctor --json             # Machine-readable environment report
+outform install [target]         # Install optional tools (see Installation)
 ```
-
-Advanced targeted installs are also available:
-
-```bash
-outform install youtube
-outform install whisper
-outform install claude
-outform install codex
-```
-
-If automatic installation is not available on your machine, `outform install` prints the manual command to run.
 
 ## Options
 
@@ -174,19 +193,28 @@ For agents and scripts, use JSON:
 outform doctor --json
 ```
 
+## Coding Agents
+
+outform is built to be driven by agents: stdout carries content only, logs go to stderr, `doctor --json` reports capabilities, and failures exit non-zero with actionable messages.
+
+The repo ships an [agent skill](skills/outform/SKILL.md) that teaches agents when and how to use the CLI. Install it with the [skills CLI](https://skills.sh):
+
+```bash
+npx skills add zvadaadam/outform
+```
+
+Or copy it manually into your agent's skills directory, e.g. for Claude Code:
+
+```bash
+cp -r node_modules/outform/skills/outform .claude/skills/outform
+```
+
 ## JS API
 
 Use the same extraction engine directly from Node.js or TypeScript:
 
 ```ts
-import {
-  OutformError,
-  extract,
-  getInstallPlan,
-  inspect,
-  probeEnvironment,
-  render,
-} from "outform";
+import { OutformError, extract, getInstallPlan, inspect, probeEnvironment, render } from "outform";
 
 const source = "https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s";
 

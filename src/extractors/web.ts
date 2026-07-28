@@ -17,10 +17,7 @@ export interface WebResult {
   excerpt: string | null;
 }
 
-export async function extractWeb(
-  source: string,
-  logger?: ExtractLogger,
-): Promise<WebResult> {
+export async function extractWeb(source: string, logger?: ExtractLogger): Promise<WebResult> {
   const remote = isValidUrl(source);
   const s = spin(remote ? "Fetching page..." : "Reading file...", logger);
 

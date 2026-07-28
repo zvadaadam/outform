@@ -1,15 +1,6 @@
 import { parseArgs } from "util";
-import {
-  render,
-  resolveUrlType,
-  extract,
-  type ExtractFormat,
-  type ExtractProvider,
-} from "./api";
-import {
-  checkDependencies,
-  getDoctorReport,
-} from "./utils/deps";
+import { render, resolveUrlType, extract, type ExtractFormat, type ExtractProvider } from "./api";
+import { checkDependencies, getDoctorReport } from "./utils/deps";
 import { createStderrLogger, log, logError, logSuccess } from "./utils/log";
 import { writeOutput } from "./output/formatter";
 import { isValidSource } from "./utils/url";
@@ -137,10 +128,7 @@ function resolveSummarize(values: Record<string, unknown>): boolean {
   return summarizeRequested;
 }
 
-function resolveProvider(
-  values: Record<string, unknown>,
-  summarizeRequested: boolean,
-): ExtractProvider | undefined {
+function resolveProvider(values: Record<string, unknown>, summarizeRequested: boolean): ExtractProvider | undefined {
   const provider = values.provider as string | undefined;
 
   if (!provider) {
@@ -200,9 +188,7 @@ async function runSetupCommand(target: string | undefined, shouldRun: boolean): 
   }
 
   if (!isSetupTarget(target)) {
-    throw new OutformError(
-      unknownSetupTargetIssue(target, getSetupTargetLabels()),
-    );
+    throw new OutformError(unknownSetupTargetIssue(target, getSetupTargetLabels()));
   }
 
   if (shouldRun) {
@@ -281,9 +267,7 @@ export async function run(args: string[]): Promise<void> {
 
   const url = positionals[0] ?? (await readUrlFromStdin());
   if (!url) {
-    logError(
-      "No source provided. Pass a URL or file path, or pipe one on stdin. Run `outform --help` for usage.",
-    );
+    logError("No source provided. Pass a URL or file path, or pipe one on stdin. Run `outform --help` for usage.");
     process.exit(1);
   }
 

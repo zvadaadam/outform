@@ -1,13 +1,15 @@
 import { logProgress, logError, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
 import { extractYouTubeId } from "../utils/url";
-import { hasCommand } from "../utils/deps";
+import { findWhisperModel, hasCommand, installHintsFor } from "../utils/deps";
 import { stripVttTimestamps, parseChapters, type Chapter } from "../utils/vtt";
 import { missingDependencyIssue, OutformError } from "../errors";
-import { spawn, waitForResult, fileExists } from "../utils/process";
+import { spawn, waitForResult } from "../utils/process";
 import { tmpdir } from "os";
 import { join } from "path";
 import { mkdtemp, readdir, readFile, rm } from "fs/promises";
+
+export { findWhisperModel } from "../utils/deps";
 
 const WHISPER_COMMANDS = ["whisper-cpp", "whisper-cli"];
 
@@ -21,11 +23,7 @@ export interface YouTubeResult {
   transcript: string;
 }
 
-export async function extractYouTube(
-  url: string,
-  lang: string = "en",
-  logger?: ExtractLogger,
-): Promise<YouTubeResult> {
+export async function extractYouTube(url: string, lang: string = "en", logger?: ExtractLogger): Promise<YouTubeResult> {
   const videoId = extractYouTubeId(url);
   if (!videoId) {
     throw new Error(`Could not extract YouTube video ID from: ${url}`);
@@ -50,8 +48,9 @@ export async function extractYouTube(
     throw new Error(
       `No captions available for this video in language "${lang}". ` +
         `Try a different language with --lang, or the video may not have subtitles.\n` +
-        `Install whisper.cpp to enable audio transcription fallback:\n` +
-        `  brew install whisper-cpp`,
+        `Enable the audio transcription fallback with:\n` +
+        `  outform install whisper\n` +
+        `  outform install ffmpeg`,
     );
   }
 
@@ -70,6 +69,7 @@ export async function extractYouTube(
 
 async function ensureYtDlp(url: string): Promise<void> {
   if (!(await hasCommand("yt-dlp"))) {
+    const hints = installHintsFor("youtube");
     throw new OutformError(
       missingDependencyIssue({
         url,
@@ -77,12 +77,10 @@ async function ensureYtDlp(url: string): Promise<void> {
         capability: "youtube",
         dependency: "yt-dlp",
         setupTarget: "youtube",
-        installHints: ["brew install yt-dlp", "pip install yt-dlp"],
+        installHints: hints,
         message:
-          "yt-dlp is not installed. Install it with:\n" +
-          "  brew install yt-dlp\n" +
-          "  # or: pip install yt-dlp\n" +
-          "  # or: https://github.com/yt-dlp/yt-dlp#installation",
+          "yt-dlp is not installed. Run `outform install youtube` to install it automatically, or use:\n" +
+          hints.map((hint) => `  ${hint}`).join("\n"),
       }),
     );
   }
@@ -107,11 +105,7 @@ async function fetchMetadata(url: string): Promise<Record<string, any>> {
   }
 }
 
-async function fetchCaptions(
-  url: string,
-  videoId: string,
-  lang: string,
-): Promise<string | null> {
+async function fetchCaptions(url: string, videoId: string, lang: string): Promise<string | null> {
   const workDir = await mkdtemp(join(tmpdir(), `outform-yt-${videoId}-`));
 
   try {
@@ -147,23 +141,23 @@ async function fetchCaptions(
   }
 }
 
-async function whisperFallback(
-  url: string,
-  videoId: string,
-  logger?: ExtractLogger,
-): Promise<string | null> {
+async function whisperFallback(url: string, videoId: string, logger?: ExtractLogger): Promise<string | null> {
   const whisperCommand = await resolveWhisperCommand();
   if (!whisperCommand) {
-    logError("whisper-cpp not found — cannot transcribe audio", logger);
+    logError("whisper.cpp not found — cannot transcribe audio. Run `outform install whisper`.", logger);
+    return null;
+  }
+
+  if (!(await hasCommand("ffmpeg"))) {
+    logError("ffmpeg is required for audio transcription. Run `outform install ffmpeg`.", logger);
     return null;
   }
 
   const model = await findWhisperModel();
   if (!model) {
     logError(
-      "No whisper model found. Set WHISPER_MODEL env var or install a model:\n" +
-        "  brew install whisper-cpp\n" +
-        "  export WHISPER_MODEL=/path/to/ggml-base.en.bin",
+      "No whisper model found. Run `outform install whisper` to download the base.en model,\n" +
+        "or set WHISPER_MODEL=/path/to/ggml-base.en.bin",
       logger,
     );
     return null;
@@ -191,22 +185,10 @@ async function resolveWhisperCommand(): Promise<string | null> {
   return null;
 }
 
-async function downloadAudio(
-  url: string,
-  workDir: string,
-  logger?: ExtractLogger,
-): Promise<string | null> {
+async function downloadAudio(url: string, workDir: string, logger?: ExtractLogger): Promise<string | null> {
   const s = spin("Downloading audio for transcription...", logger);
   const proc = spawn(
-    [
-      "yt-dlp",
-      "--extract-audio",
-      "--audio-format",
-      "wav",
-      "-o",
-      join(workDir, "audio.%(ext)s"),
-      url,
-    ],
+    ["yt-dlp", "--extract-audio", "--audio-format", "wav", "-o", join(workDir, "audio.%(ext)s"), url],
     { stdout: "pipe", stderr: "pipe" },
   );
 
@@ -251,25 +233,4 @@ async function transcribeWithWhisper(
     .join("\n\n");
 
   return text || null;
-}
-
-export async function findWhisperModel(): Promise<string | null> {
-  const envModel = process.env.WHISPER_MODEL;
-  if (envModel) {
-    if (await fileExists(envModel)) return envModel;
-  }
-
-  const home = process.env.HOME || "";
-  const candidates = [
-    "/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin",
-    "/usr/local/share/whisper-cpp/models/ggml-base.en.bin",
-    join(home, ".cache/whisper/ggml-base.en.bin"),
-    join(home, ".local/share/whisper-cpp/models/ggml-base.en.bin"),
-  ];
-
-  for (const path of candidates) {
-    if (await fileExists(path)) return path;
-  }
-
-  return null;
 }

@@ -1,13 +1,61 @@
 import { log } from "./log";
+import { fileExists } from "./process";
 import { access, constants } from "node:fs/promises";
+import { homedir } from "node:os";
 import { delimiter, extname, isAbsolute, join } from "node:path";
 
-export type SetupTarget = "youtube" | "whisper" | "claude" | "codex";
+export type SetupTarget = "youtube" | "whisper" | "ffmpeg" | "claude" | "codex";
+
+type HintPlatform = "darwin" | "linux" | "win32";
+
+const INSTALL_HINTS: Record<SetupTarget, Record<HintPlatform, string[]>> = {
+  youtube: {
+    darwin: ["brew install yt-dlp", "pipx install yt-dlp"],
+    linux: ["outform install youtube", "sudo apt install yt-dlp", "pipx install yt-dlp"],
+    win32: ["winget install yt-dlp", "pip install yt-dlp"],
+  },
+  whisper: {
+    darwin: ["brew install whisper-cpp"],
+    linux: [
+      "sudo apt install cmake build-essential",
+      "git clone https://github.com/ggml-org/whisper.cpp && cd whisper.cpp && cmake -B build -DGGML_NATIVE=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build -j && sudo cmake --install build && sudo ldconfig",
+    ],
+    win32: ["Build whisper.cpp from source: https://github.com/ggml-org/whisper.cpp"],
+  },
+  ffmpeg: {
+    darwin: ["brew install ffmpeg"],
+    linux: ["sudo apt install ffmpeg", "sudo dnf install ffmpeg"],
+    win32: ["winget install ffmpeg"],
+  },
+  claude: {
+    darwin: ["npm install -g @anthropic-ai/claude-code"],
+    linux: ["npm install -g @anthropic-ai/claude-code"],
+    win32: ["npm install -g @anthropic-ai/claude-code"],
+  },
+  codex: {
+    darwin: ["npm install -g @openai/codex"],
+    linux: ["npm install -g @openai/codex"],
+    win32: ["npm install -g @openai/codex"],
+  },
+};
+
+function hintPlatform(platform: NodeJS.Platform): HintPlatform {
+  return platform === "darwin" || platform === "win32" ? platform : "linux";
+}
+
+export function installHintsFor(target: SetupTarget, platform: NodeJS.Platform = process.platform): string[] {
+  return INSTALL_HINTS[target][hintPlatform(platform)];
+}
+
+export function manualInstallHintsFor(target: SetupTarget, platform: NodeJS.Platform = process.platform): string[] {
+  return installHintsFor(target, platform).filter((hint) => !hint.startsWith("outform "));
+}
 
 interface Dependency {
   id: SetupTarget;
   name: string;
   command: string;
+  altCommands?: string[];
   installHint: string;
   purpose: string;
   setupCommand: string;
@@ -53,45 +101,57 @@ export interface DoctorReport {
       status: "ready";
     };
     youtube: CapabilityStatus;
+    transcription: CapabilityStatus;
     aiSummary: CapabilityStatus;
   };
   recommendedActions: string[];
 }
 
-const TOOLS: Dependency[] = [
-  {
-    id: "youtube",
-    name: "yt-dlp",
-    command: "yt-dlp",
-    installHint: "brew install yt-dlp",
-    purpose: "YouTube extraction",
-    setupCommand: "outform install youtube",
-  },
-  {
-    id: "whisper",
-    name: "whisper.cpp",
-    command: "whisper-cli",
-    installHint: "brew install whisper-cpp",
-    purpose: "Audio transcription fallback",
-    setupCommand: "outform install whisper",
-  },
-  {
-    id: "claude",
-    name: "claude CLI",
-    command: "claude",
-    installHint: "npm i -g @anthropic-ai/claude-code",
-    purpose: "AI summarization",
-    setupCommand: "outform install claude",
-  },
-  {
-    id: "codex",
-    name: "codex CLI",
-    command: "codex",
-    installHint: "npm i -g @openai/codex",
-    purpose: "AI summarization",
-    setupCommand: "outform install codex",
-  },
-];
+function buildTools(): Dependency[] {
+  return [
+    {
+      id: "youtube",
+      name: "yt-dlp",
+      command: "yt-dlp",
+      installHint: installHintsFor("youtube")[0]!,
+      purpose: "YouTube extraction",
+      setupCommand: "outform install youtube",
+    },
+    {
+      id: "whisper",
+      name: "whisper.cpp",
+      command: "whisper-cli",
+      altCommands: ["whisper-cpp"],
+      installHint: installHintsFor("whisper")[0]!,
+      purpose: "Audio transcription fallback",
+      setupCommand: "outform install whisper",
+    },
+    {
+      id: "ffmpeg",
+      name: "ffmpeg",
+      command: "ffmpeg",
+      installHint: installHintsFor("ffmpeg")[0]!,
+      purpose: "Audio extraction for whisper",
+      setupCommand: "outform install ffmpeg",
+    },
+    {
+      id: "claude",
+      name: "claude CLI",
+      command: "claude",
+      installHint: installHintsFor("claude")[0]!,
+      purpose: "AI summarization",
+      setupCommand: "outform install claude",
+    },
+    {
+      id: "codex",
+      name: "codex CLI",
+      command: "codex",
+      installHint: installHintsFor("codex")[0]!,
+      purpose: "AI summarization",
+      setupCommand: "outform install codex",
+    },
+  ];
+}
 
 const ENV_VARS: EnvVar[] = [
   {
@@ -107,13 +167,10 @@ const ENV_VARS: EnvVar[] = [
 ];
 
 export async function hasCommand(cmd: string): Promise<boolean> {
-  const pathValue = Object.entries(process.env).find(
-    ([key]) => key.toLowerCase() === "path",
-  )?.[1];
+  const pathValue = Object.entries(process.env).find(([key]) => key.toLowerCase() === "path")?.[1];
   const pathEntries = isAbsolute(cmd) ? [""] : (pathValue ?? "").split(delimiter);
-  const extensions = process.platform === "win32" && !extname(cmd)
-    ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";")
-    : [""];
+  const extensions =
+    process.platform === "win32" && !extname(cmd) ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";") : [""];
 
   for (const directory of pathEntries) {
     for (const extension of extensions) {
@@ -128,12 +185,43 @@ export async function hasCommand(cmd: string): Promise<boolean> {
   return false;
 }
 
+export const WHISPER_MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin";
+
+export function defaultWhisperModelPath(): string {
+  return join(homedir(), ".cache", "whisper", "ggml-base.en.bin");
+}
+
+export async function findWhisperModel(): Promise<string | null> {
+  const envModel = process.env.WHISPER_MODEL;
+  if (envModel) {
+    if (await fileExists(envModel)) return envModel;
+  }
+
+  const home = process.env.HOME || "";
+  const candidates = [
+    "/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin",
+    "/usr/local/share/whisper-cpp/models/ggml-base.en.bin",
+    join(home, ".cache/whisper/ggml-base.en.bin"),
+    join(home, ".local/share/whisper-cpp/models/ggml-base.en.bin"),
+  ];
+
+  for (const path of candidates) {
+    if (await fileExists(path)) return path;
+  }
+
+  return null;
+}
+
 export async function probeEnvironment(): Promise<DoctorReport> {
   const tools = await Promise.all(
-    TOOLS.map(async (dep) => ({
-      ...dep,
-      found: await hasCommand(dep.command),
-    })),
+    buildTools().map(async (dep) => {
+      const commands = [dep.command, ...(dep.altCommands ?? [])];
+      const results = await Promise.all(commands.map((command) => hasCommand(command)));
+      return {
+        ...dep,
+        found: results.some(Boolean),
+      };
+    }),
   );
 
   const env = ENV_VARS.map((item) => ({
@@ -141,7 +229,10 @@ export async function probeEnvironment(): Promise<DoctorReport> {
     found: Boolean(process.env[item.name]),
   }));
 
-  const hasYtDlp = tools.find((tool) => tool.command === "yt-dlp")?.found ?? false;
+  const hasYtDlp = tools.find((tool) => tool.id === "youtube")?.found ?? false;
+  const hasWhisper = tools.find((tool) => tool.id === "whisper")?.found ?? false;
+  const hasFfmpeg = tools.find((tool) => tool.id === "ffmpeg")?.found ?? false;
+  const whisperModel = await findWhisperModel();
 
   const providers: string[] = [];
   if (tools.find((tool) => tool.command === "claude")?.found) {
@@ -169,27 +260,47 @@ export async function probeEnvironment(): Promise<DoctorReport> {
         setupCommand: "outform install youtube",
       };
 
-  const aiSummary: CapabilityStatus = providers.length > 0
-    ? {
-        available: true,
-        status: "ready",
-        providers,
-      }
-    : {
-        available: false,
-        status: "needs_provider",
-        requires: [
-          "claude CLI",
-          "codex CLI",
-          "ANTHROPIC_API_KEY",
-          "OPENAI_API_KEY",
-        ],
-        providers: [],
-      };
+  const transcriptionMissing: string[] = [];
+  if (!hasWhisper) transcriptionMissing.push("whisper.cpp");
+  if (!hasFfmpeg) transcriptionMissing.push("ffmpeg");
+  if (!whisperModel) transcriptionMissing.push("whisper model");
+
+  const transcription: CapabilityStatus =
+    transcriptionMissing.length === 0
+      ? {
+          available: true,
+          status: "ready",
+        }
+      : {
+          available: false,
+          status: "needs_dependency",
+          requires: transcriptionMissing,
+          setupCommand: "outform install whisper",
+        };
+
+  const aiSummary: CapabilityStatus =
+    providers.length > 0
+      ? {
+          available: true,
+          status: "ready",
+          providers,
+        }
+      : {
+          available: false,
+          status: "needs_provider",
+          requires: ["claude CLI", "codex CLI", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"],
+          providers: [],
+        };
 
   const recommendedActions: string[] = [];
   if (!hasYtDlp) {
     recommendedActions.push("outform install youtube");
+  }
+  if (hasWhisper && !whisperModel) {
+    recommendedActions.push("outform install whisper  # downloads the base.en model");
+  }
+  if (hasWhisper && !hasFfmpeg) {
+    recommendedActions.push("outform install ffmpeg");
   }
   if (providers.length === 0) {
     recommendedActions.push(
@@ -215,6 +326,7 @@ export async function probeEnvironment(): Promise<DoctorReport> {
         status: "ready",
       },
       youtube,
+      transcription,
       aiSummary,
     },
     recommendedActions,
@@ -235,12 +347,8 @@ export function formatDoctorReport(report: DoctorReport): string {
   lines.push("");
 
   lines.push("  Tools:");
-  lines.push(
-    `  ${"Status".padEnd(statusWidth)} ${"Name".padEnd(14)} ${"Purpose".padEnd(28)} Install`,
-  );
-  lines.push(
-    `  ${"─".repeat(statusWidth)} ${"─".repeat(14)} ${"─".repeat(28)} ${"─".repeat(36)}`,
-  );
+  lines.push(`  ${"Status".padEnd(statusWidth)} ${"Name".padEnd(14)} ${"Purpose".padEnd(28)} Install`);
+  lines.push(`  ${"─".repeat(statusWidth)} ${"─".repeat(14)} ${"─".repeat(28)} ${"─".repeat(36)}`);
   for (const tool of report.tools) {
     const status = tool.found ? "✓ found" : "✗ missing";
     lines.push(
@@ -250,17 +358,11 @@ export function formatDoctorReport(report: DoctorReport): string {
 
   lines.push("");
   lines.push("  Environment:");
-  lines.push(
-    `  ${"Status".padEnd(statusWidth)} ${"Variable".padEnd(18)} ${"Purpose".padEnd(22)} Setup`,
-  );
-  lines.push(
-    `  ${"─".repeat(statusWidth)} ${"─".repeat(18)} ${"─".repeat(22)} ${"─".repeat(30)}`,
-  );
+  lines.push(`  ${"Status".padEnd(statusWidth)} ${"Variable".padEnd(18)} ${"Purpose".padEnd(22)} Setup`);
+  lines.push(`  ${"─".repeat(statusWidth)} ${"─".repeat(18)} ${"─".repeat(22)} ${"─".repeat(30)}`);
   for (const item of report.env) {
     const status = item.found ? "✓ set" : "✗ unset";
-    lines.push(
-      `  ${status.padEnd(statusWidth)} ${item.name.padEnd(18)} ${item.purpose.padEnd(22)} ${item.hint}`,
-    );
+    lines.push(`  ${status.padEnd(statusWidth)} ${item.name.padEnd(18)} ${item.purpose.padEnd(22)} ${item.hint}`);
   }
 
   lines.push("");
@@ -271,6 +373,9 @@ export function formatDoctorReport(report: DoctorReport): string {
   lines.push("    ✓ PDF extraction          (built-in)");
   lines.push(
     `    ${report.capabilities.youtube.available ? "✓" : "✗"} YouTube extraction       ${report.capabilities.youtube.available ? "(ready)" : "(needs yt-dlp)"}`,
+  );
+  lines.push(
+    `    ${report.capabilities.transcription.available ? "✓" : "✗"} Audio transcription      ${report.capabilities.transcription.available ? "(ready)" : `(needs ${(report.capabilities.transcription.requires ?? []).join(" + ")})`}`,
   );
   lines.push(
     `    ${report.capabilities.aiSummary.available ? "✓" : "✗"} AI summarization        ${report.capabilities.aiSummary.available ? "(ready)" : "(needs AI provider)"}`,

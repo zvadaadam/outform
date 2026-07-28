@@ -3,9 +3,7 @@ import { extractPdf } from "../../src/extractors/pdf";
 
 describe("extractPdf", () => {
   test("extracts text from a real PDF (arxiv)", async () => {
-    const result = await extractPdf(
-      "https://arxiv.org/pdf/2301.00001v1.pdf"
-    );
+    const result = await extractPdf("https://arxiv.org/pdf/2301.00001v1.pdf");
 
     expect(result.title).toBeTruthy();
     expect(result.source).toBe("https://arxiv.org/pdf/2301.00001v1.pdf");
@@ -14,21 +12,17 @@ describe("extractPdf", () => {
   }, 30_000);
 
   test("throws on non-existent URL", async () => {
-    await expect(
-      extractPdf("https://example.com/nonexistent.pdf")
-    ).rejects.toThrow();
+    await expect(extractPdf("https://example.com/nonexistent.pdf")).rejects.toThrow();
   });
 
   test("throws friendly error for unresolvable hostname", async () => {
-    await expect(
-      extractPdf("https://this-domain-does-not-exist-zzz.invalid/doc.pdf")
-    ).rejects.toThrow(/Could not resolve hostname/);
+    await expect(extractPdf("https://this-domain-does-not-exist-zzz.invalid/doc.pdf")).rejects.toThrow(
+      /Could not resolve hostname/,
+    );
   });
 
   test("returns structured PdfResult", async () => {
-    const result = await extractPdf(
-      "https://arxiv.org/pdf/2301.00001v1.pdf"
-    );
+    const result = await extractPdf("https://arxiv.org/pdf/2301.00001v1.pdf");
 
     expect(result).toHaveProperty("title");
     expect(result).toHaveProperty("pageCount");

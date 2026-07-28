@@ -1,4 +1,4 @@
-const VTT_HEADER = /^WEBVTT\s*$/m;
+const VTT_HEADER_BLOCK = /^\uFEFF?WEBVTT[^\n]*(?:\n(?!\s*\n)[^\n]*)*/;
 const VTT_TIMESTAMP = /^\d{2}:\d{2}:\d{2}\.\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}\.\d{3}.*$/gm;
 const SRT_TIMESTAMP = /^\d{2}:\d{2}:\d{2},\d{3}\s*-->\s*\d{2}:\d{2}:\d{2},\d{3}.*$/gm;
 const SRT_INDEX = /^\d+\s*$/gm;
@@ -9,7 +9,7 @@ const VTT_STYLE = /^STYLE\s[\s\S]*?(?=\n\n|\n$|$)/gm;
 export function stripVttTimestamps(input: string): string {
   let text = input;
 
-  text = text.replace(VTT_HEADER, "");
+  text = text.replace(VTT_HEADER_BLOCK, "");
   text = text.replace(VTT_NOTE, "");
   text = text.replace(VTT_STYLE, "");
   text = text.replace(VTT_TIMESTAMP, "");
@@ -66,9 +66,7 @@ export interface Chapter {
   endTime?: number;
 }
 
-export function parseChapters(
-  metadata: Record<string, any>
-): Chapter[] | null {
+export function parseChapters(metadata: Record<string, any>): Chapter[] | null {
   const chapters = metadata.chapters;
   if (!Array.isArray(chapters) || chapters.length === 0) return null;
 

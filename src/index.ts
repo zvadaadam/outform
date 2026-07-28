@@ -3,6 +3,8 @@ export {
   probeEnvironment,
   getDoctorReport,
   formatDoctorReport,
+  findWhisperModel,
+  installHintsFor,
   type DoctorReport,
 } from "./utils/deps";
 export {
@@ -23,16 +25,9 @@ export {
   runSetup,
   runSetupAll,
   type InstallPlan,
+  type InstallStep,
   type SetupPlan,
+  type SetupStep,
 } from "./setup";
-export {
-  createStderrLogger,
-  stderrLogger,
-  silentLogger,
-  type ExtractLogger,
-} from "./utils/log";
-export {
-  OutformError,
-  type OutformErrorCode,
-  type OutformIssue,
-} from "./errors";
+export { createStderrLogger, stderrLogger, silentLogger, type ExtractLogger } from "./utils/log";
+export { OutformError, type OutformErrorCode, type OutformIssue } from "./errors";
