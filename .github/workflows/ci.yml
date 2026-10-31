@@ -37,3 +37,38 @@ jobs:
           artifacts/outform-linux-x64 --version
           artifacts/outform-linux-x64 README.md > /tmp/outform-readme.md
           test -s /tmp/outform-readme.md
+
+  setup-smoke:
+    name: Extraction setup (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Install extraction dependencies and verify repeatability
+        shell: bash
+        env:
+          OUTFORM_TOOLS_DIR: ${{ runner.temp }}/outform-tools
+        run: |
+          node dist/bin.js install --json > setup-result.json
+          node -e 'const r = JSON.parse(require("fs").readFileSync("setup-result.json", "utf8")); if (!r.ready) process.exit(1)'
+          node dist/bin.js install --dry-run --json > setup-plan.json
+          node -e 'const r = JSON.parse(require("fs").readFileSync("setup-plan.json", "utf8")); if (!r.plans.every(p => p.installed)) process.exit(1)'
+          bun scripts/smoke-whisper.ts
+          node dist/bin.js feedback --help
+      - name: Build and launch signed macOS executable
+        if: runner.os == 'macOS'
+        run: |
+          bun run build:binary -- --outfile artifacts/outform-smoke
+          artifacts/outform-smoke --version

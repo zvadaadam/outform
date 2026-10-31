@@ -11,7 +11,7 @@ function runEval(script: string, envOverrides: Record<string, string | undefined
   return Bun.spawn([process.execPath, "-e", script], {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, NO_COLOR: "1", ...envOverrides },
+    env: { ...process.env, NO_COLOR: "1", OUTFORM_TOOLS_DIR: "/tmp/outform-no-tools", ...envOverrides },
   });
 }
 
@@ -33,7 +33,7 @@ describe("JS API", () => {
         type: result.type,
         title: result.title,
         source: result.source,
-        summary: result.summary,
+        issues: result.issues,
         hasMarkdown: result.markdown.includes("## Content"),
         hasText: result.text.includes("Source:"),
         jsonType: result.json.type,
@@ -49,7 +49,7 @@ describe("JS API", () => {
     expect(parsed.type).toBe("web");
     expect(parsed.title.length).toBeGreaterThan(0);
     expect(parsed.source).toBe("https://paulgraham.com/superlinear.html");
-    expect(parsed.summary).toBeNull();
+    expect(parsed.issues).toEqual([]);
     expect(parsed.hasMarkdown).toBe(true);
     expect(parsed.hasText).toBe(true);
     expect(parsed.jsonType).toBe("web");
@@ -69,16 +69,16 @@ describe("JS API", () => {
     expect(stderr).toContain("Fetching page");
   });
 
-  test("inspect() reflects actual AI summary capability when not requested", async () => {
+  test("inspect() reflects actual optional chapter capability when not requested", async () => {
     const script = `
       import { inspect } from "./src/index.ts";
 
       const result = await inspect("https://example.com");
       console.log(JSON.stringify({
         ready: result.ready,
-        requested: result.capabilities.aiSummary.requested,
-        available: result.capabilities.aiSummary.available,
-        providers: result.capabilities.aiSummary.providers,
+        requested: result.capabilities.aiChapters.requested,
+        available: result.capabilities.aiChapters.available,
+        providers: result.capabilities.aiChapters.providers,
       }));
     `;
 
@@ -172,7 +172,7 @@ describe("JS API", () => {
 
       console.log(JSON.stringify({
         hasPlatform: Boolean(environment.platform),
-        hasCapabilities: Boolean(environment.capabilities.youtube && environment.capabilities.aiSummary),
+        hasCapabilities: Boolean(environment.capabilities.youtube && environment.capabilities.aiChapters),
         setupTarget: installPlan.target,
         setupName: installPlan.name,
       }));

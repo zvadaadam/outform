@@ -16,7 +16,7 @@ import {
   type WebJsonOutput,
 } from "./output/formatter";
 import { detectProvider } from "./ai/provider";
-import { summarize } from "./ai/summarize";
+import { generateChapters } from "./ai/chapters";
 import { detectUrlType, isValidSource, isValidUrl, type UrlType } from "./utils/url";
 import { installHintsFor, probeEnvironment } from "./utils/deps";
 import {
@@ -27,14 +27,14 @@ import {
   noAiProviderIssue,
   type OutformIssue,
 } from "./errors";
-import { silentLogger, type ExtractLogger } from "./utils/log";
+import { silentLogger, logError, type ExtractLogger } from "./utils/log";
 
 export type ExtractFormat = "md" | "txt" | "json";
 export type ExtractProvider = "claude" | "codex" | "none";
 export type ExtractJson = WebJsonOutput | PdfJsonOutput | YouTubeJsonOutput;
 
 export interface ExtractOptions {
-  summarize?: boolean;
+  chapters?: boolean;
   lang?: string;
   provider?: ExtractProvider;
   urlType?: UrlType;
@@ -42,14 +42,14 @@ export interface ExtractOptions {
 }
 
 export interface InspectOptions {
-  summarize?: boolean;
+  chapters?: boolean;
   provider?: ExtractProvider;
   urlType?: UrlType;
 }
 
 export interface InspectCapability {
   available: boolean;
-  capability: "web" | "pdf" | "youtube" | "aiSummary";
+  capability: "web" | "pdf" | "youtube" | "aiChapters";
   dependency?: string;
   providers?: string[];
   setupCommand?: string;
@@ -61,12 +61,12 @@ export interface InspectResult {
   valid: boolean;
   type: UrlType | null;
   ready: boolean;
-  summarize: boolean;
+  chapters: boolean;
   provider: ExtractProvider | "auto";
   issues: OutformIssue[];
   capabilities: {
     extraction: InspectCapability;
-    aiSummary: InspectCapability & {
+    aiChapters: InspectCapability & {
       requested: boolean;
     };
   };
@@ -77,7 +77,7 @@ interface BaseExtractResult<TType extends UrlType, TJson extends ExtractJson> {
   url: string;
   title: string;
   source: string;
-  summary: string | null;
+  issues: OutformIssue[];
   markdown: string;
   text: string;
   json: TJson;
@@ -135,10 +135,6 @@ function findTool(report: Awaited<ReturnType<typeof probeEnvironment>>, command:
   return report.tools.find((tool) => tool.command === command)?.found ?? false;
 }
 
-function findEnv(report: Awaited<ReturnType<typeof probeEnvironment>>, name: string): boolean {
-  return report.env.find((item) => item.name === name)?.found ?? false;
-}
-
 function getAiIssue(
   report: Awaited<ReturnType<typeof probeEnvironment>>,
   provider: ExtractProvider | undefined,
@@ -146,11 +142,13 @@ function getAiIssue(
   urlType: UrlType,
 ): OutformIssue | null {
   if (provider === "none") {
-    return invalidOptionsIssue('Cannot summarize with provider "none". Choose claude, codex, or omit provider.');
+    return invalidOptionsIssue(
+      'Cannot generate chapters with provider "none". Choose claude, codex, or omit provider.',
+    );
   }
 
   if (!provider) {
-    if (report.capabilities.aiSummary.available) {
+    if (report.capabilities.aiChapters.available) {
       return null;
     }
 
@@ -164,12 +162,13 @@ function getAiIssue(
     return missingDependencyIssue({
       url,
       urlType,
-      capability: "aiSummary",
+      capability: "aiChapters",
       dependency: "claude CLI",
       setupTarget: "claude",
       installHints: ["npm install -g @anthropic-ai/claude-code"],
       message:
-        "Claude CLI is not available for summaries. Install it with:\n" + "  npm install -g @anthropic-ai/claude-code",
+        "Claude CLI is not available for chapter generation. Install it with:\n" +
+        "  npm install -g @anthropic-ai/claude-code",
     });
   }
 
@@ -177,11 +176,12 @@ function getAiIssue(
     return missingDependencyIssue({
       url,
       urlType,
-      capability: "aiSummary",
+      capability: "aiChapters",
       dependency: "codex CLI",
       setupTarget: "codex",
       installHints: ["npm install -g @openai/codex"],
-      message: "Codex CLI is not available for summaries. Install it with:\n" + "  npm install -g @openai/codex",
+      message:
+        "Codex CLI is not available for chapter generation. Install it with:\n" + "  npm install -g @openai/codex",
     });
   }
 
@@ -196,7 +196,7 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
       valid: false,
       type: null,
       ready: false,
-      summarize: options.summarize ?? false,
+      chapters: options.chapters ?? false,
       provider: options.provider ?? "auto",
       issues: [issue],
       capabilities: {
@@ -204,10 +204,10 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
           available: false,
           capability: "web",
         },
-        aiSummary: {
-          requested: options.summarize ?? false,
+        aiChapters: {
+          requested: options.chapters ?? false,
           available: false,
-          capability: "aiSummary",
+          capability: "aiChapters",
           providers: [],
         },
       },
@@ -215,7 +215,7 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
   }
 
   const urlType = options.urlType ?? (await resolveUrlType(url));
-  const summarizeRequested = options.summarize ?? false;
+  const chaptersRequested = options.chapters ?? false;
   const provider = options.provider ?? "auto";
   const report = await probeEnvironment();
   const issues: OutformIssue[] = [];
@@ -224,11 +224,13 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
   switch (urlType) {
     case "youtube": {
       const available = report.capabilities.youtube.available;
-      const hints = installHintsFor("youtube");
+      const missing = report.capabilities.youtube.requires ?? [];
+      const dependency = missing[0] ?? "yt-dlp";
+      const hints = [...installHintsFor("youtube"), ...(missing.includes("deno") ? installHintsFor("deno") : [])];
       extractionCapability = {
         available,
         capability: "youtube",
-        dependency: available ? undefined : "yt-dlp",
+        dependency: available ? undefined : dependency,
         setupCommand: available ? undefined : "outform install youtube",
         installHints: available ? undefined : hints,
       };
@@ -239,11 +241,11 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
             url,
             urlType,
             capability: "youtube",
-            dependency: "yt-dlp",
+            dependency,
             setupTarget: "youtube",
             installHints: hints,
             message:
-              "yt-dlp is required for YouTube extraction. Run `outform install youtube` to install it automatically, or use:\n" +
+              `${missing.join(" + ")} required for YouTube extraction. Run \`outform install youtube\` to prepare it automatically, or use:\n` +
               hints.map((hint) => `  ${hint}`).join("\n"),
           }),
         );
@@ -266,22 +268,27 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
     }
   }
 
-  const aiProviders = report.capabilities.aiSummary.providers ?? [];
+  const aiProviders = report.capabilities.aiChapters.providers ?? [];
   const aiCapability: InspectCapability & { requested: boolean } = {
-    requested: summarizeRequested,
-    available: report.capabilities.aiSummary.available,
-    capability: "aiSummary",
+    requested: chaptersRequested,
+    available: report.capabilities.aiChapters.available,
+    capability: "aiChapters",
     providers: aiProviders,
   };
 
-  if (summarizeRequested) {
+  if (chaptersRequested && urlType !== "youtube") {
+    issues.push(invalidOptionsIssue("Chapter generation is supported for YouTube videos only."));
+  }
+  if (options.provider && options.provider !== "none" && !chaptersRequested) {
+    issues.push(invalidOptionsIssue("Use provider together with chapters: true."));
+  }
+  if (chaptersRequested) {
     const aiIssue = getAiIssue(report, options.provider, url, urlType);
     if (aiIssue) {
       aiCapability.available = false;
       aiCapability.dependency = aiIssue.dependency;
       aiCapability.setupCommand = aiIssue.setupCommand;
       aiCapability.installHints = aiIssue.installHints;
-      issues.push(aiIssue);
     }
   }
 
@@ -290,12 +297,12 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
     valid: true,
     type: urlType,
     ready: issues.length === 0,
-    summarize: summarizeRequested,
+    chapters: chaptersRequested,
     provider,
     issues,
     capabilities: {
       extraction: extractionCapability,
-      aiSummary: aiCapability,
+      aiChapters: aiCapability,
     },
   };
 }
@@ -307,60 +314,71 @@ export async function extract(url: string, options: ExtractOptions = {}): Promis
   }
 
   const logger = options.logger ?? silentLogger;
-  const summarizeRequested = options.summarize ?? false;
+  const chaptersRequested = options.chapters ?? false;
   const lang = options.lang ?? "en";
   const urlType = inspection.type!;
-  const provider = summarizeRequested
-    ? await detectProvider(options.provider, false)
-    : { type: "none" as const, name: "none" };
 
   try {
     switch (urlType) {
       case "web": {
         const result = await extractWeb(url, logger);
-        const aiSummary = summarizeRequested ? await summarize(result.content, provider, logger) : null;
-        const json = buildWebJson(result, aiSummary);
+        const json = buildWebJson(result);
 
         return {
           type: "web",
           url,
           title: result.title,
           source: result.source,
-          summary: aiSummary,
-          markdown: formatWebMarkdown(result, aiSummary),
-          text: formatWebText(result, aiSummary),
+          issues: [],
+          markdown: formatWebMarkdown(result),
+          text: formatWebText(result),
           json,
         };
       }
       case "youtube": {
         const result = await extractYouTube(url, lang, logger);
-        const aiSummary = summarizeRequested ? await summarize(result.transcript, provider, logger) : null;
-        const json = buildYouTubeJson(result, aiSummary);
+        if (chaptersRequested && !result.chapters?.length) {
+          try {
+            const provider = await detectProvider(options.provider, false);
+            result.chapters = await generateChapters(result.transcriptSegments, result.duration, provider, logger);
+            result.chaptersSource = "generated";
+          } catch (error) {
+            const issue: OutformIssue = {
+              code: "CHAPTER_GENERATION_FAILED",
+              capability: "aiChapters",
+              url,
+              urlType,
+              message: `Could not generate chapters: ${error instanceof Error ? error.message : String(error)}. Available source content is still included.`,
+            };
+            result.issues.push(issue);
+            logError(issue.message, logger);
+          }
+        }
+        const json = buildYouTubeJson(result);
 
         return {
           type: "youtube",
           url,
           title: result.title,
           source: result.source,
-          summary: aiSummary,
-          markdown: formatYouTubeMarkdown(result, aiSummary),
-          text: formatYouTubeText(result, aiSummary),
+          issues: result.issues,
+          markdown: formatYouTubeMarkdown(result),
+          text: formatYouTubeText(result),
           json,
         };
       }
       case "pdf": {
         const result = await extractPdf(url, logger);
-        const aiSummary = summarizeRequested ? await summarize(result.content, provider, logger) : null;
-        const json = buildPdfJson(result, aiSummary);
+        const json = buildPdfJson(result);
 
         return {
           type: "pdf",
           url,
           title: result.title,
           source: result.source,
-          summary: aiSummary,
-          markdown: formatPdfMarkdown(result, aiSummary),
-          text: formatPdfText(result, aiSummary),
+          issues: [],
+          markdown: formatPdfMarkdown(result),
+          text: formatPdfText(result),
           json,
         };
       }

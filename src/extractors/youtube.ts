@@ -2,25 +2,56 @@ import { logProgress, logError, type ExtractLogger } from "../utils/log";
 import { spin } from "../utils/spinner";
 import { extractYouTubeId } from "../utils/url";
 import { findWhisperModel, hasCommand, installHintsFor } from "../utils/deps";
-import { stripVttTimestamps, parseChapters, type Chapter } from "../utils/vtt";
-import { missingDependencyIssue, OutformError } from "../errors";
-import { spawn, waitForResult } from "../utils/process";
+import {
+  parseTranscriptSegments,
+  parseWhisperSegments,
+  transcriptText,
+  parseChapters,
+  type Chapter,
+  type TranscriptSegment,
+} from "../utils/vtt";
+import { missingDependencyIssue, OutformError, type OutformIssue } from "../errors";
+import { spawn, waitForResult, toolPath } from "../utils/process";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, dirname } from "path";
 import { mkdtemp, readdir, readFile, rm } from "fs/promises";
 
 export { findWhisperModel } from "../utils/deps";
 
-const WHISPER_COMMANDS = ["whisper-cpp", "whisper-cli"];
+function ytDlpCommand(args: string[], audio = false): string[] {
+  return [
+    "yt-dlp",
+    "--ignore-config",
+    "--no-playlist",
+    "--no-js-runtimes",
+    "--js-runtimes",
+    `deno:${toolPath("deno")}`,
+    ...(audio ? ["--ffmpeg-location", dirname(toolPath("ffmpeg"))] : []),
+    ...args,
+  ];
+}
 
-export interface YouTubeResult {
+export interface YouTubeMetadata {
+  videoId: string;
+  author: string | null;
+  channelId: string | null;
+  channelUrl: string | null;
+  thumbnail: string | null;
+  uploadDate: string | null;
   title: string;
   channel: string;
   description: string;
   source: string;
   duration: number | null;
+}
+
+export interface YouTubeResult extends YouTubeMetadata {
   chapters: Chapter[] | null;
   transcript: string;
+  transcriptSegments: TranscriptSegment[];
+  transcriptSource: "captions" | "whisper" | null;
+  chaptersSource: "source" | "generated" | null;
+  issues: OutformIssue[];
 }
 
 export async function extractYouTube(url: string, lang: string = "en", logger?: ExtractLogger): Promise<YouTubeResult> {
@@ -36,34 +67,43 @@ export async function extractYouTube(url: string, lang: string = "en", logger?: 
   s.stop("Metadata fetched");
 
   s = spin("Downloading captions...", logger);
-  let transcript = await fetchCaptions(url, videoId, lang);
-  s.stop(transcript ? "Captions downloaded" : "No captions found");
+  let segments = await fetchCaptions(url, videoId, lang);
+  let transcriptSource: YouTubeResult["transcriptSource"] = segments?.length ? "captions" : null;
+  const issues: OutformIssue[] = [];
+  s.stop(segments?.length ? "Captions downloaded" : "No captions found");
 
-  if (!transcript) {
+  if (!segments?.length) {
     logProgress("Attempting audio transcription fallback...", logger);
-    transcript = await whisperFallback(url, videoId, logger);
+    try {
+      segments = await whisperFallback(url, videoId, logger);
+      if (segments?.length) transcriptSource = "whisper";
+    } catch (error) {
+      logError(`Transcription failed: ${error instanceof Error ? error.message : String(error)}`, logger);
+    }
   }
-
-  if (!transcript) {
-    throw new Error(
-      `No captions available for this video in language "${lang}". ` +
-        `Try a different language with --lang, or the video may not have subtitles.\n` +
-        `Enable the audio transcription fallback with:\n` +
-        `  outform install whisper\n` +
-        `  outform install ffmpeg`,
-    );
+  if (!segments?.length) {
+    const issue: OutformIssue = {
+      code: "TRANSCRIPT_UNAVAILABLE",
+      capability: "transcription",
+      url,
+      urlType: "youtube",
+      message: `No transcript is available in language "${lang}". Metadata and source chapters are still included.`,
+      setupCommand: "outform install whisper",
+    };
+    issues.push(issue);
+    logError(`${issue.message} Run outform install whisper to prepare transcription.`, logger);
   }
 
   const chapters = parseChapters(metadata);
 
   return {
-    title: metadata.title || metadata.fulltitle || "Untitled Video",
-    channel: metadata.channel || metadata.uploader || "Unknown",
-    description: metadata.description || "",
-    source: `https://www.youtube.com/watch?v=${videoId}`,
-    duration: metadata.duration ?? null,
+    ...parseYouTubeMetadata(metadata, videoId),
     chapters,
-    transcript,
+    transcript: transcriptText(segments ?? []),
+    transcriptSegments: segments ?? [],
+    transcriptSource,
+    chaptersSource: chapters ? "source" : null,
+    issues,
   };
 }
 
@@ -86,8 +126,68 @@ async function ensureYtDlp(url: string): Promise<void> {
   }
 }
 
-async function fetchMetadata(url: string): Promise<Record<string, any>> {
-  const proc = spawn(["yt-dlp", "--dump-json", "--no-download", url], {
+function metadataText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function metadataUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return ["https:", "http:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function uploadDate(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{8}$/.test(value)) return null;
+  const date = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date ? date : null;
+}
+
+function thumbnailUrl(metadata: Record<string, unknown>): string | null {
+  const preferred = metadataUrl(metadata.thumbnail);
+  if (preferred) return preferred;
+  if (!Array.isArray(metadata.thumbnails)) return null;
+  let best: { url: string; area: number } | null = null;
+  for (const thumbnail of metadata.thumbnails) {
+    if (!thumbnail || typeof thumbnail !== "object") continue;
+    const url = metadataUrl(thumbnail.url);
+    if (!url) continue;
+    const area = [thumbnail.width, thumbnail.height].every(
+      (value) => typeof value === "number" && Number.isFinite(value) && value > 0,
+    )
+      ? thumbnail.width * thumbnail.height
+      : 0;
+    if (!best || area >= best.area) best = { url, area };
+  }
+  return best?.url ?? null;
+}
+
+export function parseYouTubeMetadata(metadata: Record<string, unknown>, videoId: string): YouTubeMetadata {
+  const author = metadataText(metadata.channel).trim() || metadataText(metadata.uploader).trim() || null;
+  return {
+    videoId,
+    title: metadataText(metadata.title).trim() || metadataText(metadata.fulltitle).trim() || "Untitled Video",
+    author,
+    channel: author ?? "Unknown",
+    channelId: metadataText(metadata.channel_id).trim() || null,
+    channelUrl: metadataUrl(metadata.channel_url) ?? metadataUrl(metadata.uploader_url),
+    thumbnail: thumbnailUrl(metadata),
+    uploadDate: uploadDate(metadata.upload_date),
+    description: metadataText(metadata.description),
+    source: `https://www.youtube.com/watch?v=${videoId}`,
+    duration:
+      typeof metadata.duration === "number" && Number.isFinite(metadata.duration) && metadata.duration >= 0
+        ? metadata.duration
+        : null,
+  };
+}
+
+async function fetchMetadata(url: string): Promise<Record<string, unknown>> {
+  const proc = spawn(ytDlpCommand(["--dump-json", "--no-download", url]), {
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -99,19 +199,21 @@ async function fetchMetadata(url: string): Promise<Record<string, any>> {
   }
 
   try {
-    return JSON.parse(stdout);
+    const metadata: unknown = JSON.parse(stdout);
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata))
+      throw new Error("Expected video metadata object");
+    return metadata as Record<string, unknown>;
   } catch {
     throw new Error("Failed to parse yt-dlp metadata output as JSON");
   }
 }
 
-async function fetchCaptions(url: string, videoId: string, lang: string): Promise<string | null> {
+async function fetchCaptions(url: string, videoId: string, lang: string): Promise<TranscriptSegment[] | null> {
   const workDir = await mkdtemp(join(tmpdir(), `outform-yt-${videoId}-`));
 
   try {
     const proc = spawn(
-      [
-        "yt-dlp",
+      ytDlpCommand([
         "--write-sub",
         "--write-auto-sub",
         "--sub-lang",
@@ -123,7 +225,7 @@ async function fetchCaptions(url: string, videoId: string, lang: string): Promis
         "-o",
         join(workDir, "%(id)s"),
         url,
-      ],
+      ]),
       { stdout: "pipe", stderr: "pipe" },
     );
 
@@ -135,21 +237,26 @@ async function fetchCaptions(url: string, videoId: string, lang: string): Promis
     if (!vttFile) return null;
 
     const vttContent = await readFile(join(workDir, vttFile), "utf-8");
-    return stripVttTimestamps(vttContent);
+    const segments = parseTranscriptSegments(vttContent);
+    return segments.length ? segments : null;
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
-async function whisperFallback(url: string, videoId: string, logger?: ExtractLogger): Promise<string | null> {
-  const whisperCommand = await resolveWhisperCommand();
-  if (!whisperCommand) {
+async function whisperFallback(
+  url: string,
+  videoId: string,
+  logger?: ExtractLogger,
+): Promise<TranscriptSegment[] | null> {
+  const whisperCommand = "whisper-cli";
+  if (!(await hasCommand(whisperCommand))) {
     logError("whisper.cpp not found — cannot transcribe audio. Run `outform install whisper`.", logger);
     return null;
   }
 
-  if (!(await hasCommand("ffmpeg"))) {
-    logError("ffmpeg is required for audio transcription. Run `outform install ffmpeg`.", logger);
+  if (!(await hasCommand("ffmpeg")) || !(await hasCommand("ffprobe"))) {
+    logError("ffmpeg and ffprobe are required for audio transcription. Run `outform install ffmpeg`.", logger);
     return null;
   }
 
@@ -175,20 +282,22 @@ async function whisperFallback(url: string, videoId: string, logger?: ExtractLog
   }
 }
 
-async function resolveWhisperCommand(): Promise<string | null> {
-  for (const command of WHISPER_COMMANDS) {
-    if (await hasCommand(command)) {
-      return command;
-    }
-  }
-
-  return null;
-}
-
 async function downloadAudio(url: string, workDir: string, logger?: ExtractLogger): Promise<string | null> {
   const s = spin("Downloading audio for transcription...", logger);
   const proc = spawn(
-    ["yt-dlp", "--extract-audio", "--audio-format", "wav", "-o", join(workDir, "audio.%(ext)s"), url],
+    ytDlpCommand(
+      [
+        "--extract-audio",
+        "--audio-format",
+        "wav",
+        "--postprocessor-args",
+        "ffmpeg:-ar 16000 -ac 1",
+        "-o",
+        join(workDir, "audio.%(ext)s"),
+        url,
+      ],
+      true,
+    ),
     { stdout: "pipe", stderr: "pipe" },
   );
 
@@ -210,14 +319,15 @@ async function transcribeWithWhisper(
   audioPath: string,
   modelPath: string,
   logger?: ExtractLogger,
-): Promise<string | null> {
+): Promise<TranscriptSegment[] | null> {
   const s = spin("Transcribing audio with whisper.cpp...", logger);
-  const proc = spawn([command, "-m", modelPath, "-f", audioPath, "--no-timestamps"], {
+  const output = join(dirname(audioPath), "transcript");
+  const proc = spawn([command, "-m", modelPath, "-f", audioPath, "--output-json", "--output-file", output], {
     stdout: "pipe",
     stderr: "pipe",
   });
 
-  const { stdout, stderr, exitCode } = await waitForResult(proc);
+  const { stderr, exitCode } = await waitForResult(proc);
 
   if (exitCode !== 0) {
     s.stop("Transcription failed");
@@ -226,11 +336,6 @@ async function transcribeWithWhisper(
   }
   s.stop("Audio transcribed");
 
-  const text = stdout
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .join("\n\n");
-
-  return text || null;
+  const segments = parseWhisperSegments(JSON.parse(await readFile(`${output}.json`, "utf8")));
+  return segments.length ? segments : null;
 }

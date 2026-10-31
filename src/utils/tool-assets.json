@@ -1,0 +1,110 @@
+{
+  "youtube": {
+    "version": "2026.10.26",
+    "baseUrl": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/",
+    "sha256": {
+      "yt-dlp.exe": "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d",
+      "yt-dlp_arm64.exe": "0066dbac3c124028e2dcae2a197fccee33cd91f456313d24f7af89fd54590e98",
+      "yt-dlp_linux": "767ba9dce7052aa196f8b12652f433d76de128ba168966fa84b6394d5e6c6795",
+      "yt-dlp_linux_aarch64": "e87e9533e89fe5889abaa21f5114dfe7756d6aa6219b83551add04d48b18e483",
+      "yt-dlp_macos": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa",
+      "yt-dlp_musllinux": "e97a4dd919221d233e7720e18fa3f66db60fbd1d8c0846bf6deb8e88e04475a8",
+      "yt-dlp_musllinux_aarch64": "ea97b8564667f3cabc334c3216526de39bc684e99815ecf07b6642f4cba8af4d"
+    }
+  },
+  "ffmpeg": {
+    "version": "b6.1.1",
+    "baseUrl": "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/",
+    "sha256": {
+      "ffmpeg-darwin-arm64": "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584",
+      "ffmpeg-darwin-x64": "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894",
+      "ffmpeg-linux-arm": "0afba4a11110e6e402053e0fc14c33a7eb207d7a588688ae87dba471a0f06c71",
+      "ffmpeg-linux-arm64": "6bb182d0d75d23028db82e9e4f723ca69b853d055698486e6984ddb2c06fb8ce",
+      "ffmpeg-linux-ia32": "c6472eb993612db72ca50893a34137ba11173e60a1a4c028d4660a3f755d2490",
+      "ffmpeg-linux-x64": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99",
+      "ffmpeg-win32-x64": "04e1307997530f9cf2fe35cba2ca7e8875ca91da02f89d6c7243df819c94ad00",
+      "ffprobe-darwin-arm64": "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64",
+      "ffprobe-darwin-x64": "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0",
+      "ffprobe-linux-arm": "e61ef24870ddc3b80aa8b435512a545bd889e4ed4c2fc7c885f7d3dabad2a53f",
+      "ffprobe-linux-arm64": "d17ae9b4c297d48e2521ba14e417bb0537c6ff77c584cdbcd6bb0d8d0307a2e8",
+      "ffprobe-linux-ia32": "a13b4cce0a4b9bd6714672e4df81076ec06f4c295d798162d48e3de68c781d6d",
+      "ffprobe-linux-x64": "4f231a1960d83e403d08f7971e271707bec278a9ae18e21b8b5b03186668450d",
+      "ffprobe-win32-x64": "3a7e2dc003dc2cd1472827e4c7c4f056ae1ae0ae7c5bbc580c99b49827351ba4"
+    }
+  },
+  "deno": {
+    "version": "v2.9.8",
+    "baseUrl": "https://github.com/denoland/deno/releases/download/v2.9.8/",
+    "sha256": {
+      "deno-aarch64-apple-darwin.zip": "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+      "deno-aarch64-pc-windows-msvc.zip": "b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef",
+      "deno-aarch64-unknown-linux-gnu.zip": "d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905",
+      "deno-x86_64-apple-darwin.zip": "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
+      "deno-x86_64-pc-windows-msvc.zip": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+      "deno-x86_64-unknown-linux-gnu.zip": "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609"
+    }
+  },
+  "whisper": {
+    "version": "v1.8.2",
+    "baseUrl": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.8.2/",
+    "sha256": {
+      "whisper-bin-x64.zip": "b1514ebc099765e39fa37eb780b92a140a94c86bb0b3b3d98226b38825979732"
+    },
+    "homebrew": {
+      "version": "homebrew",
+      "formula": "whisper.cpp",
+      "minimumVersion": "1.9.2"
+    },
+    "linux": {
+      "version": "v1.9.2",
+      "baseUrl": "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/",
+      "sha256": {
+        "whisper-bin-ubuntu-arm64.tar.gz": "7e26fa6a36d9174d5c0bf033ccbc026c3b5e569e2ee787058241346ef5392719",
+        "whisper-bin-ubuntu-x64.tar.gz": "46811a3ecf584307480a220b9ef5ff81b7b22dc41577cbc274ce3afc61f753b1"
+      },
+      "files": {
+        "arm64": [
+          "whisper-cli",
+          "LICENSE",
+          "libggml-base.so",
+          "libggml-base.so.0",
+          "libggml-base.so.0.18.1",
+          "libggml-cpu.so",
+          "libggml.so",
+          "libggml.so.0",
+          "libggml.so.0.18.1",
+          "libwhisper.so",
+          "libwhisper.so.1",
+          "libwhisper.so.1.9.2"
+        ],
+        "x64": [
+          "whisper-cli",
+          "LICENSE",
+          "libggml-base.so",
+          "libggml-base.so.0",
+          "libggml-base.so.0.18.1",
+          "libggml-cpu-alderlake.so",
+          "libggml-cpu-cannonlake.so",
+          "libggml-cpu-cascadelake.so",
+          "libggml-cpu-cooperlake.so",
+          "libggml-cpu-haswell.so",
+          "libggml-cpu-icelake.so",
+          "libggml-cpu-ivybridge.so",
+          "libggml-cpu-piledriver.so",
+          "libggml-cpu-sandybridge.so",
+          "libggml-cpu-sapphirerapids.so",
+          "libggml-cpu-skylakex.so",
+          "libggml-cpu-sse42.so",
+          "libggml-cpu-x64.so",
+          "libggml-cpu-zen4.so",
+          "libggml.so",
+          "libggml.so.0",
+          "libggml.so.0.18.1",
+          "libwhisper.so",
+          "libwhisper.so.1",
+          "libwhisper.so.1.9.2"
+        ]
+      }
+    }
+  }
+}

@@ -5,16 +5,17 @@ import { createStderrLogger, log, logError, logSuccess } from "./utils/log";
 import { writeOutput } from "./output/formatter";
 import { isValidSource } from "./utils/url";
 import {
-  formatSetupPlan,
   formatSetupPlans,
-  getSetupPlan,
   getSetupPlans,
   getSetupTargetLabels,
   isSetupTarget,
-  runSetup,
-  runSetupAll,
+  installTargets,
+  EXTRACTION_TARGETS,
+  getSetupTargets,
 } from "./setup";
-import { OutformError, unknownSetupTargetIssue } from "./errors";
+import { runFeedbackCommand } from "./feedback";
+import { OutformError, unknownSetupTargetIssue, invalidOptionsIssue } from "./errors";
+import type { SetupTarget } from "./utils/deps";
 import packageJson from "../package.json" with { type: "json" };
 
 const { version } = packageJson;
@@ -28,23 +29,25 @@ Usage:
   outform <source> [options]
   outform [options]      Read a URL or file path from stdin
   outform doctor [--json]
-  outform install [target]
+  outform install [target ...] [--dry-run] [--json]
+  outform feedback --message "<feedback>" [--json]
   outform --check
   outform --help
 
 Default behavior:
   Prints AI-ready Markdown to stdout.
   Prints logs and progress to stderr.
-  Does not use AI unless you ask for it with --summarize.
+  Includes video title, channel, description, thumbnail URL, upload date, chapters, and timed transcript.
+  Generates missing chapters only when requested with --chapters.
   Quote URLs that contain shell characters like ? or &.
 
 Options:
   --json                   Output structured JSON
   --text                   Output plain text
-  --summarize              Add an AI summary
+  --chapters               Generate missing YouTube chapters with short descriptions
   --output <path>          Write result to a file instead of stdout
   --lang <code>            Caption language for YouTube (default: en)
-  --provider <name>        AI provider for --summarize (claude|codex|none)
+  --provider <name>        Chapter provider for --chapters (claude|codex|none)
   --format <md|txt|json>   Advanced format override
   --check                  Alias for human-readable doctor output
   --version                Show version
@@ -52,16 +55,26 @@ Options:
 
 Commands:
   doctor                   Show dependency and capability status
-  install                  Install supported optional tools
+  install                  Prepare extraction tools and model (no target needed)
+  install all              Also install both AI CLIs (optional)
+  feedback                 Send feedback or a failed-task report; see feedback --help
+
+Setup prerequisites:
+  macOS: Homebrew with a compatible Whisper bottle.
+  Linux: glibc x64/arm64, tar, and OpenMP/C++ runtimes (libgomp1/libstdc++6 on Debian/Ubuntu).
+
+Setup options:
+  --dry-run                Show the setup plan without installing
+  --json                   Return a machine-readable setup plan or result
 
 Compatibility:
-  --raw                    Alias for default non-summarized output
+  --raw                    Alias for default source-only output
   --stdout                 Alias for default stdout output
 
 Examples:
   outform 'https://www.youtube.com/watch?v=3mFNpeJQjmw&t=1315s'
   outform --json 'https://example.com/article'
-  outform --summarize 'https://example.com/article'
+  outform --chapters 'https://www.youtube.com/watch?v=3mFNpeJQjmw'
   outform ./report.pdf
   outform ./notes.md
   outform doctor --json
@@ -72,7 +85,7 @@ Examples:
 
 export interface CliOptions {
   url: string;
-  summarize: boolean;
+  chapters: boolean;
   format: ExtractFormat;
   lang: string;
   provider: ExtractProvider | undefined;
@@ -117,18 +130,18 @@ function resolveFormat(values: Record<string, unknown>): ExtractFormat {
   return format as ExtractFormat;
 }
 
-function resolveSummarize(values: Record<string, unknown>): boolean {
+function resolveChapters(values: Record<string, unknown>): boolean {
   const raw = values.raw as boolean;
-  const summarizeRequested = values.summarize as boolean;
+  const chaptersRequested = values.chapters as boolean;
 
-  if (raw && summarizeRequested) {
-    throw new Error("Use either --summarize or --raw, not both.");
+  if (raw && chaptersRequested) {
+    throw new Error("Use either --chapters or --raw, not both.");
   }
 
-  return summarizeRequested;
+  return chaptersRequested;
 }
 
-function resolveProvider(values: Record<string, unknown>, summarizeRequested: boolean): ExtractProvider | undefined {
+function resolveProvider(values: Record<string, unknown>, chaptersRequested: boolean): ExtractProvider | undefined {
   const provider = values.provider as string | undefined;
 
   if (!provider) {
@@ -139,8 +152,8 @@ function resolveProvider(values: Record<string, unknown>, summarizeRequested: bo
     throw new Error(`Unknown provider "${provider}". Use: claude, codex, or none.`);
   }
 
-  if (!summarizeRequested && provider !== "none") {
-    throw new Error("Use --provider together with --summarize.");
+  if (!chaptersRequested && provider !== "none") {
+    throw new Error("Use --provider together with --chapters.");
   }
 
   return provider as ExtractProvider;
@@ -166,41 +179,59 @@ async function runDoctor(jsonOutput: boolean): Promise<void> {
   await checkDependencies();
 }
 
-async function runSetupCommand(target: string | undefined, shouldRun: boolean): Promise<void> {
-  if (!target) {
-    if (shouldRun) {
-      await runSetupAll();
-      return;
+function cliError(error: unknown, jsonOutput: boolean, setup = false): void {
+  const issue =
+    error instanceof OutformError
+      ? error.issue
+      : invalidOptionsIssue(error instanceof Error ? error.message : String(error));
+  if (jsonOutput)
+    process.stdout.write(
+      JSON.stringify({ ...(setup ? { ready: false, results: [] } : {}), issues: [issue] }, null, 2) + "\n",
+    );
+  logError(issue.message);
+  process.exitCode = 1;
+}
+
+async function runSetupCommand(requested: string[], shouldRun: boolean, jsonOutput = false): Promise<void> {
+  const targets: SetupTarget[] = [];
+  if (requested.includes("all") && requested.length > 1)
+    throw new OutformError(invalidOptionsIssue("Use install all on its own, or name individual targets."));
+  if (!requested.length) targets.push(...EXTRACTION_TARGETS);
+  else if (requested[0] === "all") targets.push(...getSetupTargets());
+  else
+    for (const target of requested) {
+      if (!isSetupTarget(target)) throw new OutformError(unknownSetupTargetIssue(target, getSetupTargetLabels()));
+      targets.push(target);
     }
-
-    process.stdout.write(formatSetupPlans(await getSetupPlans()) + "\n");
+  if (!shouldRun) {
+    const plans = await getSetupPlans(targets);
+    process.stdout.write((jsonOutput ? JSON.stringify({ plans }, null, 2) : formatSetupPlans(plans)) + "\n");
     return;
   }
-
-  if (target === "all") {
-    if (shouldRun) {
-      await runSetupAll();
-      return;
-    }
-
-    process.stdout.write(formatSetupPlans(await getSetupPlans()) + "\n");
-    return;
-  }
-
-  if (!isSetupTarget(target)) {
-    throw new OutformError(unknownSetupTargetIssue(target, getSetupTargetLabels()));
-  }
-
-  if (shouldRun) {
-    await runSetup(target);
-    return;
-  }
-
-  const plan = await getSetupPlan(target);
-  process.stdout.write(formatSetupPlan(plan) + "\n");
+  const report = await installTargets(targets);
+  if (jsonOutput) process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  if (!report.ready) process.exitCode = 1;
+  else if (!requested.length) logSuccess("Extraction setup is ready. Chapter generation is optional.");
 }
 
 export async function run(args: string[]): Promise<void> {
+  if (args[0] === "feedback") {
+    try {
+      await runFeedbackCommand(args.slice(1));
+    } catch (error) {
+      cliError(error, args.includes("--json"));
+    }
+    return;
+  }
+  if (args.includes("--summarize")) {
+    cliError(
+      new Error(
+        "--summarize has been removed. Outform returns source content; use --chapters for missing YouTube chapters.",
+      ),
+      args.includes("--json"),
+    );
+    return;
+  }
   let parsed;
   try {
     parsed = parseArgs({
@@ -208,7 +239,7 @@ export async function run(args: string[]): Promise<void> {
       options: {
         raw: { type: "boolean", default: false },
         stdout: { type: "boolean", default: false },
-        summarize: { type: "boolean", default: false },
+        chapters: { type: "boolean", default: false },
         json: { type: "boolean", default: false },
         text: { type: "boolean", default: false },
         output: { type: "string" },
@@ -216,15 +247,16 @@ export async function run(args: string[]): Promise<void> {
         lang: { type: "string", default: "en" },
         provider: { type: "string" },
         run: { type: "boolean", default: false },
+        "dry-run": { type: "boolean", default: false },
         check: { type: "boolean", default: false },
         version: { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
       allowPositionals: true,
     });
-  } catch (e: any) {
-    logError(e.message);
-    process.exit(1);
+  } catch (error) {
+    cliError(error, args.includes("--json"), args[0] === "install" || args[0] === "setup");
+    return;
   }
 
   const { values, positionals } = parsed;
@@ -247,12 +279,12 @@ export async function run(args: string[]): Promise<void> {
     }
 
     if (command === "setup") {
-      await runSetupCommand(positionals[1], values.run as boolean);
+      await runSetupCommand(positionals.slice(1), Boolean(values.run) && !values["dry-run"], values.json);
       return;
     }
 
     if (command === "install") {
-      await runSetupCommand(positionals[1], true);
+      await runSetupCommand(positionals.slice(1), !values["dry-run"], values.json);
       return;
     }
 
@@ -260,38 +292,41 @@ export async function run(args: string[]): Promise<void> {
       await runDoctor(false);
       return;
     }
-  } catch (e: any) {
-    logError(e.message);
-    process.exit(1);
+  } catch (error) {
+    cliError(error, args.includes("--json"), args[0] === "install" || args[0] === "setup");
+    return;
   }
 
   const url = positionals[0] ?? (await readUrlFromStdin());
   if (!url) {
-    logError("No source provided. Pass a URL or file path, or pipe one on stdin. Run `outform --help` for usage.");
-    process.exit(1);
+    cliError(
+      new Error("No source provided. Pass a URL or file path, or pipe one on stdin. Run `outform --help` for usage."),
+      values.json,
+    );
+    return;
   }
 
   if (!(await isValidSource(url))) {
-    logError(`Invalid URL or file path: ${url}`);
-    process.exit(1);
+    cliError(new Error(`Invalid URL or file path: ${url}`), values.json);
+    return;
   }
 
   let format: ExtractFormat;
-  let summarizeRequested: boolean;
+  let chaptersRequested: boolean;
   let provider: ExtractProvider | undefined;
 
   try {
     format = resolveFormat(values);
-    summarizeRequested = resolveSummarize(values);
-    provider = resolveProvider(values, summarizeRequested);
-  } catch (e: any) {
-    logError(e.message);
-    process.exit(1);
+    chaptersRequested = resolveChapters(values);
+    provider = resolveProvider(values, chaptersRequested);
+  } catch (error) {
+    cliError(error, args.includes("--json"), args[0] === "install" || args[0] === "setup");
+    return;
   }
 
   const options: CliOptions = {
     url,
-    summarize: summarizeRequested,
+    chapters: chaptersRequested,
     format,
     lang: values.lang as string,
     provider,
@@ -303,7 +338,7 @@ export async function run(args: string[]): Promise<void> {
     log(`Detected type: ${urlType}`);
 
     const result = await extract(url, {
-      summarize: options.summarize,
+      chapters: options.chapters,
       lang: options.lang,
       provider: options.provider,
       urlType,
@@ -311,8 +346,8 @@ export async function run(args: string[]): Promise<void> {
     });
 
     await emitOutput(render(result, options.format), options.output);
-  } catch (e: any) {
-    logError(e.message);
-    process.exit(1);
+  } catch (error) {
+    cliError(error, args.includes("--json"), args[0] === "install" || args[0] === "setup");
+    return;
   }
 }

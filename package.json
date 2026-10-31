@@ -1,6 +1,6 @@
 {
   "name": "outform",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turn any URL or local file into AI-ready Markdown, text, or JSON",
   "keywords": [
     "ai",
@@ -60,6 +60,8 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "fflate": "^0.8.3",
+    "hivenet": "^0.7.0",
     "linkedom": "^0.18.12",
     "pdf-parse": "^2.4.5",
     "turndown": "^7.2.4"

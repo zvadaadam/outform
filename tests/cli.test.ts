@@ -1,16 +1,17 @@
 import { describe, test, expect } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { createManagedTools } from "./fixtures/tools";
 
 const CLI = [process.execPath, "run", "src/bin.ts"];
-const NO_TOOLS_ENV = { PATH: "/tmp/outform-no-tools" };
+const NO_TOOLS_ENV = { PATH: "/tmp/outform-no-tools", OUTFORM_TOOLS_DIR: "/tmp/outform-no-tools" };
 
 function run(args: string[], envOverrides: Record<string, string | undefined> = {}) {
   return Bun.spawn([...CLI, ...args], {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, NO_COLOR: "1", ...envOverrides },
+    env: { ...process.env, NO_COLOR: "1", OUTFORM_TOOLS_DIR: "/tmp/outform-no-tools", ...envOverrides },
   });
 }
 
@@ -37,13 +38,51 @@ async function createFakeToolPath(commands: string[]): Promise<{ dir: string; pa
 }
 
 describe("CLI flags", () => {
+  test("install accepts multiple targets and includes each companion once", async () => {
+    const result = await collect(run(["install", "youtube", "ffmpeg", "youtube", "--dry-run", "--json"], NO_TOOLS_ENV));
+    expect(result.exitCode).toBe(0);
+    const targets = JSON.parse(result.stdout).plans.map((plan: { target: string }) => plan.target);
+    expect(targets).toEqual(["deno", "youtube", "ffmpeg"]);
+  });
+
+  test("invalid later setup targets fail before mutation and return structured JSON", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "outform-invalid-setup-"));
+    try {
+      const result = await collect(
+        run(["install", "youtube", "unknown", "--json"], { ...NO_TOOLS_ENV, OUTFORM_TOOLS_DIR: dir }),
+      );
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        ready: false,
+        results: [],
+        issues: [{ code: "UNKNOWN_SETUP_TARGET" }],
+      });
+      expect(await readdir(dir)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("argument errors remain JSON-readable and removed summary flag explains migration", async () => {
+    for (const args of [
+      ["install", "--not-an-option", "--json"],
+      ["--summarize", "--json"],
+    ]) {
+      const result = await collect(run(args, NO_TOOLS_ENV));
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.stdout).issues[0].code).toBe("INVALID_OPTIONS");
+    }
+    const result = await collect(run(["--summarize", "--json"], NO_TOOLS_ENV));
+    expect(JSON.parse(result.stdout).issues[0].message).toContain("--chapters");
+  });
+
   test("--help prints curl-style usage and exits 0", async () => {
     const { stdout, exitCode } = await collect(run(["--help"]));
     expect(exitCode).toBe(0);
     expect(stdout).toContain("outform - curl for AI-ready content");
     expect(stdout).toContain("--json");
     expect(stdout).toContain("--text");
-    expect(stdout).toContain("--summarize");
+    expect(stdout).toContain("--chapters");
     expect(stdout).toContain("--output");
     expect(stdout).toContain("doctor");
     expect(stdout).toContain("install");
@@ -79,7 +118,7 @@ describe("CLI flags", () => {
     expect(stderr).toContain("PDF extraction");
     expect(stderr).toContain("YouTube extraction");
     expect(stderr).toContain("Audio transcription");
-    expect(stderr).toContain("AI summarization");
+    expect(stderr).toContain("AI chapter generation");
   });
 });
 
@@ -111,23 +150,23 @@ describe("CLI error handling", () => {
     expect(stderr).toContain("Choose only one of --json or --text");
   });
 
-  test("conflicting --raw and --summarize flags fail", async () => {
-    const { stderr, exitCode } = await collect(run(["--raw", "--summarize", "https://example.com"]));
+  test("conflicting --raw and --chapters flags fail", async () => {
+    const { stderr, exitCode } = await collect(run(["--raw", "--chapters", "https://example.com"]));
     expect(exitCode).toBe(1);
-    expect(stderr).toContain("Use either --summarize or --raw");
+    expect(stderr).toContain("Use either --chapters or --raw");
   });
 
   test("invalid provider prints error to stderr and exits 1", async () => {
-    const { stderr, exitCode } = await collect(run(["--summarize", "--provider", "invalid", "https://example.com"]));
+    const { stderr, exitCode } = await collect(run(["--chapters", "--provider", "invalid", "https://example.com"]));
     expect(exitCode).toBe(1);
     expect(stderr).toContain('Unknown provider "invalid"');
     expect(stderr).toContain("claude, codex, or none");
   });
 
-  test("provider requires summarize unless set to none", async () => {
+  test("provider requires chapters unless set to none", async () => {
     const { stderr, exitCode } = await collect(run(["--provider", "codex", "https://example.com"]));
     expect(exitCode).toBe(1);
-    expect(stderr).toContain("Use --provider together with --summarize");
+    expect(stderr).toContain("Use --provider together with --chapters");
   });
 });
 
@@ -191,10 +230,10 @@ describe("CLI compatibility aliases", () => {
 });
 
 describe("CLI --help content", () => {
-  test("--help documents summarize and output flags", async () => {
+  test("--help documents chapters and output flags", async () => {
     const { stdout, exitCode } = await collect(run(["--help"]));
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("--summarize");
+    expect(stdout).toContain("--chapters");
     expect(stdout).toContain("--output");
     expect(stdout).toContain("--lang");
   });
@@ -225,7 +264,7 @@ describe("CLI web extraction end-to-end", () => {
     expect(parsed.type).toBe("web");
     expect(parsed.source).toBe("https://paulgraham.com/superlinear.html");
     expect(parsed.content.length).toBeGreaterThan(1000);
-    expect(parsed.summary).toBeNull();
+    expect(parsed).not.toHaveProperty("summary");
   });
 
   test("--text outputs plain text", async () => {
@@ -354,11 +393,11 @@ describe("CLI output quality validation", () => {
     expect(stdout).toContain("## Content");
   });
 
-  test("default JSON output includes null summary", async () => {
+  test("default JSON output contains source content without a summary", async () => {
     const { stdout, exitCode } = await collect(run(["--json", "https://paulgraham.com/superlinear.html"]));
     expect(exitCode).toBe(0);
     const parsed = JSON.parse(stdout);
-    expect(parsed.summary).toBeNull();
+    expect(parsed).not.toHaveProperty("summary");
   });
 });
 
@@ -387,27 +426,23 @@ describe("CLI doctor and setup", () => {
     expect(parsed.capabilities.web.available).toBe(true);
     expect(parsed.capabilities.pdf.available).toBe(true);
     expect(parsed.capabilities.youtube).toBeDefined();
-    expect(parsed.capabilities.aiSummary).toBeDefined();
+    expect(parsed.capabilities.aiChapters).toBeDefined();
   });
 
-  test("install without a target installs every dependency by default", async () => {
-    const fakeTools = await createFakeToolPath(["yt-dlp", "whisper-cli", "ffmpeg", "claude", "codex"]);
-    const fakeModel = join(fakeTools.dir, "ggml-base.en.bin");
-    await writeFile(fakeModel, "fake model");
+  test("install without a target prepares extraction without AI CLIs", async () => {
+    const fixture = await createManagedTools();
 
     try {
-      const { stdout, stderr, exitCode } = await collect(
-        run(["install"], { PATH: fakeTools.path, WHISPER_MODEL: fakeModel }),
-      );
+      const { stdout, stderr, exitCode } = await collect(run(["install"], fixture.env));
       expect(exitCode).toBe(0);
       expect(stdout).toBe("");
       expect(stderr).toContain("yt-dlp is already installed");
       expect(stderr).toContain("whisper.cpp is already installed");
       expect(stderr).toContain("ffmpeg is already installed");
-      expect(stderr).toContain("claude CLI is already installed");
-      expect(stderr).toContain("codex CLI is already installed");
+      expect(stderr).not.toContain("claude CLI");
+      expect(stderr).not.toContain("codex CLI");
     } finally {
-      await rm(fakeTools.dir, { recursive: true, force: true });
+      await rm(fixture.root, { recursive: true, force: true });
     }
   });
 
@@ -428,7 +463,9 @@ describe("CLI doctor and setup", () => {
     expect(stdout).toContain("whisper.cpp");
     expect(stdout).toContain("claude CLI");
     expect(stdout).toContain("codex CLI");
-    expect(stdout).toContain("Run `outform install` to install everything.");
+    expect(stdout).toContain(
+      "Run `outform install` to prepare extraction; `outform install all` also installs AI CLIs.",
+    );
   });
 
   test("unknown install target exits 1 with a helpful error", async () => {
@@ -438,4 +475,95 @@ describe("CLI doctor and setup", () => {
     expect(stderr).toContain("youtube");
     expect(stderr).toContain("all");
   });
+});
+
+describe("managed setup", () => {
+  test("dry-run JSON includes companions and excludes providers by default", async () => {
+    const { stdout, stderr, exitCode } = await collect(run(["install", "--dry-run", "--json"], NO_TOOLS_ENV));
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
+    expect(JSON.parse(stdout).plans.map((p: any) => p.target)).toEqual(["deno", "youtube", "ffmpeg", "whisper"]);
+  });
+
+  test("finds managed tools with no shell PATH setup and returns valid JSON", async () => {
+    const fixture = await createManagedTools();
+    try {
+      const result = await collect(
+        run(["install", "--json"], {
+          PATH: "/tmp/outform-no-tools",
+          ...fixture.env,
+        }),
+      );
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        ready: true,
+        results: [
+          { target: "deno", status: "ready" },
+          { target: "youtube", status: "ready" },
+          { target: "ffmpeg", status: "ready" },
+          { target: "whisper", status: "ready" },
+        ],
+      });
+      expect(result.stderr).toContain("Extraction setup is ready");
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  test("a broken executable returns a structured failure and nonzero exit", async () => {
+    const fixture = await createManagedTools(["ffmpeg", "ffprobe"], { ffmpeg: "#!/bin/sh\necho broken >&2\nexit 1\n" });
+    try {
+      const result = await collect(run(["install", "ffmpeg", "--json"], fixture.env));
+      expect(result.exitCode).toBe(1);
+      const report = JSON.parse(result.stdout);
+      expect(report.ready).toBe(false);
+      expect(report.results[0].issue.code).toBe("SETUP_FAILED");
+      expect(report.results[0].issue.message).toContain("broken");
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  test("whisper plan includes ffmpeg and ffprobe when missing", async () => {
+    const result = await collect(run(["install", "whisper", "--dry-run", "--json"], NO_TOOLS_ENV));
+    const plans = JSON.parse(result.stdout).plans;
+    expect(plans.map((p: any) => p.target)).toEqual(["ffmpeg", "whisper"]);
+    expect(plans[0].steps.map((s: any) => s.label)).toEqual(["ffmpeg b6.1.1", "ffprobe b6.1.1"]);
+  });
+
+  test("feedback help and validation never send feedback", async () => {
+    const help = await collect(run(["feedback", "--help"]));
+    expect(help.exitCode).toBe(0);
+    expect(help.stdout).toContain("--resume");
+    expect(help.stdout).toContain("--task");
+    const invalid = await collect(run(["feedback", "--message", "short"]));
+    expect(invalid.exitCode).toBe(1);
+    expect(invalid.stdout).toBe("");
+    expect(invalid.stderr).toContain("40–5,000");
+  });
+});
+
+test("installer subprocess output goes to stderr alongside JSON results", async () => {
+  const fakeTools = await createFakeToolPath(["npm"]);
+  await writeFile(
+    join(fakeTools.dir, "npm"),
+    `#!/bin/sh
+printf 'package manager diagnostic\\n'
+printf '#!/bin/sh\\nexit 0\\n' > "$OUTFORM_TEST_BIN/codex"
+chmod +x "$OUTFORM_TEST_BIN/codex"
+`,
+  );
+  try {
+    const result = await collect(
+      run(["install", "codex", "--json"], {
+        PATH: fakeTools.path,
+        OUTFORM_TEST_BIN: fakeTools.dir,
+      }),
+    );
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout).ready).toBe(true);
+    expect(result.stderr).toContain("package manager diagnostic");
+  } finally {
+    await rm(fakeTools.dir, { recursive: true, force: true });
+  }
 });
