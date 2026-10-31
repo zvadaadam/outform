@@ -1,5 +1,12 @@
 import { describe, test, expect } from "bun:test";
-import { describeSetupStep, formatSetupPlan, getSetupTargetLabels, ytDlpAssetName, type SetupPlan } from "../src/setup";
+import {
+  describeSetupStep,
+  formatSetupPlan,
+  getSetupTargetLabels,
+  ytDlpAssetName,
+  compatibleWhisperVersion,
+  type SetupPlan,
+} from "../src/setup";
 import { installHintsFor, manualInstallHintsFor } from "../src/utils/deps";
 
 describe("ytDlpAssetName", () => {
@@ -13,18 +20,25 @@ describe("ytDlpAssetName", () => {
     expect(ytDlpAssetName("darwin", "x64")).toBe("yt-dlp_macos");
   });
 
+  test("supports Windows and musl binaries", () => {
+    expect(ytDlpAssetName("win32", "x64")).toBe("yt-dlp.exe");
+    expect(ytDlpAssetName("win32", "arm64")).toBe("yt-dlp_arm64.exe");
+    expect(ytDlpAssetName("linux", "x64", true)).toBe("yt-dlp_musllinux");
+    expect(ytDlpAssetName("linux", "arm64", true)).toBe("yt-dlp_musllinux_aarch64");
+  });
+
   test("returns null for unsupported platforms and architectures", () => {
-    expect(ytDlpAssetName("win32", "x64")).toBeNull();
+    expect(ytDlpAssetName("win32", "ia32")).toBeNull();
     expect(ytDlpAssetName("linux", "ia32")).toBeNull();
   });
 });
 
 describe("install hints", () => {
   test("are platform-aware", () => {
-    expect(installHintsFor("youtube", "darwin")[0]).toBe("brew install yt-dlp");
+    expect(installHintsFor("youtube", "darwin")[0]).toBe("outform install youtube");
     expect(installHintsFor("youtube", "linux")[0]).toBe("outform install youtube");
-    expect(installHintsFor("ffmpeg", "linux")).toContain("sudo apt install ffmpeg");
-    expect(installHintsFor("whisper", "linux").join("\n")).toContain("-DGGML_NATIVE=OFF");
+    expect(installHintsFor("ffmpeg", "linux")[0]).toBe("outform install ffmpeg");
+    expect(installHintsFor("whisper", "linux").join("\n")).toContain("libgomp1 libstdc++6");
   });
 
   test("manual hints never point back at outform itself", () => {
@@ -40,7 +54,7 @@ describe("install hints", () => {
 
 describe("setup targets", () => {
   test("include ffmpeg and the all alias", () => {
-    expect(getSetupTargetLabels()).toEqual(["youtube", "whisper", "ffmpeg", "claude", "codex", "all"]);
+    expect(getSetupTargetLabels()).toEqual(["youtube", "whisper", "ffmpeg", "deno", "claude", "codex", "all"]);
   });
 });
 
@@ -112,5 +126,13 @@ describe("describeSetupStep", () => {
         label: "x binary",
       }),
     ).toBe("download x binary: https://example.com/x → /tmp/x");
+  });
+});
+
+describe("Homebrew Whisper compatibility", () => {
+  test("accepts supported versions and bottle revisions, rejects old or unknown versions", () => {
+    for (const version of ["1.9.2", "1.9.4", "1.9.5_1", "1.10.0"]) expect(compatibleWhisperVersion(version)).toBe(true);
+    for (const version of ["1.8.2", "1.9.1", "2.0.0", "HEAD", "1.9.2-beta", ""])
+      expect(compatibleWhisperVersion(version)).toBe(false);
   });
 });

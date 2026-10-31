@@ -60,4 +60,14 @@ if (!result.success) {
   process.exit(1);
 }
 
+// Compilation can invalidate Bun's embedded Mach-O signature. Sign the final
+// executable on macOS so the kernel can launch downloaded/local builds.
+if (platform() === "darwin" && target.startsWith("bun-darwin")) {
+  const signing = Bun.spawn(["codesign", "--force", "--sign", "-", outfile], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  if ((await signing.exited) !== 0) throw new Error(`Could not ad-hoc sign ${outfile}`);
+}
+
 console.log(outfile);

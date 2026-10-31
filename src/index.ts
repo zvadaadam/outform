@@ -31,3 +31,8 @@ export {
 } from "./setup";
 export { createStderrLogger, stderrLogger, silentLogger, type ExtractLogger } from "./utils/log";
 export { OutformError, type OutformErrorCode, type OutformIssue } from "./errors";
+
+export { submitFeedback, type FeedbackOptions } from "./feedback";
+export { installTargets, EXTRACTION_TARGETS, type SetupReport, type SetupResult } from "./setup";
+
+export type { Chapter, TranscriptSegment } from "./utils/vtt";

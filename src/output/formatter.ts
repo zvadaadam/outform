@@ -2,7 +2,8 @@ import { writeWithDirs } from "../utils/process";
 import { extractDomain, hashString } from "../utils/url";
 import type { WebResult } from "../extractors/web";
 import type { PdfResult } from "../extractors/pdf";
-import type { YouTubeResult } from "../extractors/youtube";
+import type { YouTubeResult, YouTubeMetadata } from "../extractors/youtube";
+import type { OutformIssue } from "../errors";
 import { formatTimestamp } from "../utils/vtt";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,7 +16,6 @@ export interface WebJsonOutput {
   author: string | null;
   source: string;
   excerpt: string | null;
-  summary: string | null;
   content: string;
 }
 
@@ -24,35 +24,31 @@ export interface PdfJsonOutput {
   title: string;
   pageCount: number;
   source: string;
-  summary: string | null;
   content: string;
 }
 
-export interface YouTubeJsonOutput {
+export interface YouTubeJsonOutput extends YouTubeMetadata {
   type: "youtube";
-  title: string;
-  channel: string;
-  source: string;
-  duration: number | null;
-  description: string;
-  summary: string | null;
   chapters: YouTubeResult["chapters"];
   transcript: string;
+  transcriptSegments: YouTubeResult["transcriptSegments"];
+  transcriptSource: YouTubeResult["transcriptSource"];
+  chaptersSource: YouTubeResult["chaptersSource"];
+  issues: OutformIssue[];
 }
 
-export function buildWebJson(result: WebResult, aiSummary?: string | null): WebJsonOutput {
+export function buildWebJson(result: WebResult): WebJsonOutput {
   return {
     type: "web",
     title: result.title,
     author: result.author,
     source: result.source,
     excerpt: result.excerpt,
-    summary: aiSummary || null,
     content: result.content,
   };
 }
 
-export function formatWebMarkdown(result: WebResult, aiSummary?: string | null): string {
+export function formatWebMarkdown(result: WebResult): string {
   const lines: string[] = [];
 
   lines.push(`# ${result.title}`);
@@ -64,13 +60,6 @@ export function formatWebMarkdown(result: WebResult, aiSummary?: string | null):
   lines.push(`**Source:** ${result.source}`);
   lines.push("");
 
-  if (aiSummary) {
-    lines.push("## Summary");
-    lines.push("");
-    lines.push(aiSummary);
-    lines.push("");
-  }
-
   lines.push("---");
   lines.push("");
   lines.push("## Content");
@@ -81,7 +70,7 @@ export function formatWebMarkdown(result: WebResult, aiSummary?: string | null):
   return lines.join("\n");
 }
 
-export function formatWebText(result: WebResult, aiSummary?: string | null): string {
+export function formatWebText(result: WebResult): string {
   const lines: string[] = [];
 
   lines.push(result.title);
@@ -91,20 +80,14 @@ export function formatWebText(result: WebResult, aiSummary?: string | null): str
   lines.push(`Source: ${result.source}`);
   lines.push("");
 
-  if (aiSummary) {
-    lines.push("Summary:");
-    lines.push(aiSummary);
-    lines.push("");
-  }
-
   lines.push(result.textContent);
   lines.push("");
 
   return lines.join("\n");
 }
 
-export function formatWebJson(result: WebResult, aiSummary?: string | null): string {
-  return JSON.stringify(buildWebJson(result, aiSummary), null, 2);
+export function formatWebJson(result: WebResult): string {
+  return JSON.stringify(buildWebJson(result), null, 2);
 }
 
 export function getWebOutputPath(url: string, format: string = "md"): string {
@@ -114,18 +97,17 @@ export function getWebOutputPath(url: string, format: string = "md"): string {
   return `${OUTPUT_DIR}/web-${domain}-${hash}.${ext}`;
 }
 
-export function buildPdfJson(result: PdfResult, aiSummary?: string | null): PdfJsonOutput {
+export function buildPdfJson(result: PdfResult): PdfJsonOutput {
   return {
     type: "pdf",
     title: result.title,
     pageCount: result.pageCount,
     source: result.source,
-    summary: aiSummary || null,
     content: result.content,
   };
 }
 
-export function formatPdfMarkdown(result: PdfResult, aiSummary?: string | null): string {
+export function formatPdfMarkdown(result: PdfResult): string {
   const lines: string[] = [];
 
   lines.push(`# ${result.title}`);
@@ -133,13 +115,6 @@ export function formatPdfMarkdown(result: PdfResult, aiSummary?: string | null):
   lines.push(`**Source:** ${result.source}`);
   lines.push(`**Pages:** ${result.pageCount}`);
   lines.push("");
-
-  if (aiSummary) {
-    lines.push("## Summary");
-    lines.push("");
-    lines.push(aiSummary);
-    lines.push("");
-  }
 
   lines.push("---");
   lines.push("");
@@ -151,7 +126,7 @@ export function formatPdfMarkdown(result: PdfResult, aiSummary?: string | null):
   return lines.join("\n");
 }
 
-export function formatPdfText(result: PdfResult, aiSummary?: string | null): string {
+export function formatPdfText(result: PdfResult): string {
   const lines: string[] = [];
 
   lines.push(result.title);
@@ -161,20 +136,14 @@ export function formatPdfText(result: PdfResult, aiSummary?: string | null): str
   lines.push(`Pages: ${result.pageCount}`);
   lines.push("");
 
-  if (aiSummary) {
-    lines.push("Summary:");
-    lines.push(aiSummary);
-    lines.push("");
-  }
-
   lines.push(result.content);
   lines.push("");
 
   return lines.join("\n");
 }
 
-export function formatPdfJson(result: PdfResult, aiSummary?: string | null): string {
-  return JSON.stringify(buildPdfJson(result, aiSummary), null, 2);
+export function formatPdfJson(result: PdfResult): string {
+  return JSON.stringify(buildPdfJson(result), null, 2);
 }
 
 export function getPdfOutputPath(url: string, format: string = "md"): string {
@@ -183,38 +152,43 @@ export function getPdfOutputPath(url: string, format: string = "md"): string {
   return `${OUTPUT_DIR}/pdf-${hash}.${ext}`;
 }
 
-export function buildYouTubeJson(result: YouTubeResult, aiSummary?: string | null): YouTubeJsonOutput {
+export function buildYouTubeJson(result: YouTubeResult): YouTubeJsonOutput {
   return {
     type: "youtube",
+    videoId: result.videoId,
+    author: result.author,
+    channelId: result.channelId,
+    channelUrl: result.channelUrl,
+    thumbnail: result.thumbnail,
+    uploadDate: result.uploadDate,
     title: result.title,
     channel: result.channel,
     source: result.source,
     duration: result.duration,
     description: result.description,
-    summary: aiSummary || null,
     chapters: result.chapters,
     transcript: result.transcript,
+    transcriptSegments: result.transcriptSegments,
+    transcriptSource: result.transcriptSource,
+    chaptersSource: result.chaptersSource,
+    issues: result.issues,
   };
 }
 
-export function formatYouTubeMarkdown(result: YouTubeResult, aiSummary?: string | null): string {
+export function formatYouTubeMarkdown(result: YouTubeResult): string {
   const lines: string[] = [];
 
   lines.push(`# ${result.title}`);
   lines.push("");
   lines.push(`**Channel:** ${result.channel}`);
+  if (result.channelUrl) lines.push(`**Channel URL:** ${result.channelUrl}`);
+  if (result.uploadDate) lines.push(`**Uploaded:** ${result.uploadDate}`);
+  if (result.thumbnail) lines.push(`**Thumbnail:** ${result.thumbnail}`);
   lines.push(`**Source:** ${result.source}`);
-  if (result.duration) {
+  if (result.duration !== null) {
     lines.push(`**Duration:** ${formatTimestamp(result.duration)}`);
   }
   lines.push("");
-
-  if (aiSummary) {
-    lines.push("## Summary");
-    lines.push("");
-    lines.push(aiSummary);
-    lines.push("");
-  }
 
   if (result.description) {
     lines.push("## Description");
@@ -224,10 +198,12 @@ export function formatYouTubeMarkdown(result: YouTubeResult, aiSummary?: string 
   }
 
   if (result.chapters && result.chapters.length > 0) {
-    lines.push("## Chapters");
+    lines.push(result.chaptersSource === "generated" ? "## Chapters (AI-generated)" : "## Chapters");
     lines.push("");
     for (const ch of result.chapters) {
-      lines.push(`- **${formatTimestamp(ch.startTime)}** — ${ch.title}`);
+      const timestamp = formatTimestamp(ch.startTime);
+      const link = `${result.source}&t=${Math.floor(ch.startTime)}s`;
+      lines.push(`- **[${timestamp}](${link})** — ${ch.title}${ch.description ? `: ${ch.description}` : ""}`);
     }
     lines.push("");
   }
@@ -236,30 +212,32 @@ export function formatYouTubeMarkdown(result: YouTubeResult, aiSummary?: string 
   lines.push("");
   lines.push("## Transcript");
   lines.push("");
-  lines.push(result.transcript);
+  if (result.transcriptSegments.length) {
+    for (const segment of result.transcriptSegments) {
+      lines.push(`[${formatTimestamp(segment.startTime)}] ${segment.text}`);
+    }
+  } else lines.push(result.transcript || "Transcript unavailable.");
   lines.push("");
 
+  for (const issue of result.issues) lines.push(`Note: ${issue.message}`);
   return lines.join("\n");
 }
 
-export function formatYouTubeText(result: YouTubeResult, aiSummary?: string | null): string {
+export function formatYouTubeText(result: YouTubeResult): string {
   const lines: string[] = [];
 
   lines.push(result.title);
   lines.push("=".repeat(result.title.length));
   lines.push("");
   lines.push(`Channel: ${result.channel}`);
+  if (result.channelUrl) lines.push(`Channel URL: ${result.channelUrl}`);
+  if (result.uploadDate) lines.push(`Uploaded: ${result.uploadDate}`);
+  if (result.thumbnail) lines.push(`Thumbnail: ${result.thumbnail}`);
   lines.push(`Source: ${result.source}`);
-  if (result.duration) {
+  if (result.duration !== null) {
     lines.push(`Duration: ${formatTimestamp(result.duration)}`);
   }
   lines.push("");
-
-  if (aiSummary) {
-    lines.push("Summary:");
-    lines.push(aiSummary);
-    lines.push("");
-  }
 
   if (result.description) {
     lines.push("Description:");
@@ -268,22 +246,27 @@ export function formatYouTubeText(result: YouTubeResult, aiSummary?: string | nu
   }
 
   if (result.chapters && result.chapters.length > 0) {
-    lines.push("Chapters:");
+    lines.push(result.chaptersSource === "generated" ? "Chapters (AI-generated):" : "Chapters:");
     for (const ch of result.chapters) {
-      lines.push(`  ${formatTimestamp(ch.startTime)} - ${ch.title}`);
+      lines.push(`  ${formatTimestamp(ch.startTime)} - ${ch.title}${ch.description ? `: ${ch.description}` : ""}`);
     }
     lines.push("");
   }
 
   lines.push("Transcript:");
-  lines.push(result.transcript);
+  if (result.transcriptSegments.length) {
+    for (const segment of result.transcriptSegments) {
+      lines.push(`[${formatTimestamp(segment.startTime)}] ${segment.text}`);
+    }
+  } else lines.push(result.transcript || "Transcript unavailable.");
   lines.push("");
 
+  for (const issue of result.issues) lines.push(`Note: ${issue.message}`);
   return lines.join("\n");
 }
 
-export function formatYouTubeJson(result: YouTubeResult, aiSummary?: string | null): string {
-  return JSON.stringify(buildYouTubeJson(result, aiSummary), null, 2);
+export function formatYouTubeJson(result: YouTubeResult): string {
+  return JSON.stringify(buildYouTubeJson(result), null, 2);
 }
 
 export function getYouTubeOutputPath(videoId: string, format: string = "md"): string {

@@ -1,5 +1,88 @@
 import { describe, test, expect } from "bun:test";
-import { stripVttTimestamps, parseChapters, formatTimestamp } from "../../src/utils/vtt";
+import {
+  stripVttTimestamps,
+  parseChapters,
+  formatTimestamp,
+  parseTranscriptSegments,
+  parseWhisperSegments,
+  transcriptText,
+} from "../../src/utils/vtt";
+
+describe("timed transcripts", () => {
+  test("parses SRT and VTT, decoding text without losing cue timing", () => {
+    expect(parseTranscriptSegments("1\r\n00:01:02,250 --> 00:01:05,000\r\nHello &amp; <b>goodbye</b> &#33;")).toEqual([
+      { startTime: 62.25, endTime: 65, text: "Hello & goodbye !" },
+    ]);
+    expect(
+      parseTranscriptSegments(
+        "WEBVTT\nKind: captions\n\nNOTE ignored\n\n00:02.000 --> 00:03.500 align:start\nUseful words.",
+      ),
+    ).toEqual([{ startTime: 2, endTime: 3.5, text: "Useful words." }]);
+  });
+
+  test("removes rolling caption repetition but keeps later repeated speech", () => {
+    const segments = parseTranscriptSegments(`WEBVTT
+
+00:00.000 --> 00:02.000
+This <00:00.500>is
+
+00:02.000 --> 00:04.000
+This is <00:02.500>a rolling
+
+00:04.000 --> 00:06.000
+This is a rolling <00:04.500>caption.
+
+00:08.000 --> 00:10.000
+This is a rolling caption.`);
+    expect(segments.map((s) => s.text)).toEqual(["This is", "a rolling", "caption.", "This is a rolling caption."]);
+    expect(transcriptText(segments)).toBe("This is a rolling caption.\n\nThis is a rolling caption.");
+    expect(segments[2]!.startTime).toBe(4);
+  });
+
+  test("preserves repeated speech across ordinary adjacent publisher captions", () => {
+    const segments = parseTranscriptSegments(
+      "00:00.000 --> 00:01.000\nThey said go\n\n00:01.000 --> 00:02.000\ngo now.",
+    );
+    expect(transcriptText(segments)).toBe("They said go go now.");
+  });
+
+  test("rejects invalid or out-of-order cues and chapter boundaries", () => {
+    expect(
+      parseTranscriptSegments(
+        "00:03.000 --> 00:02.000\nInvalid\n\n00:02.000 --> 00:04.000\nValid\n\n00:01.000 --> 00:03.000\nOld",
+      ),
+    ).toEqual([{ startTime: 2, endTime: 4, text: "Valid" }]);
+    expect(
+      parseChapters({
+        chapters: [
+          null,
+          { start_time: -1 },
+          { start_time: 10, end_time: 9, title: "  Topic  " },
+          { start_time: 10 },
+          { start_time: 5 },
+          { start_time: Infinity },
+        ],
+      }),
+    ).toEqual([{ startTime: 10, title: "Topic" }]);
+  });
+
+  test("converts Whisper millisecond offsets and ignores malformed segments", () => {
+    expect(
+      parseWhisperSegments({
+        transcription: [
+          { offsets: { from: 1250, to: 2500 }, text: " Hello. " },
+          { offsets: { from: -5, to: 1 }, text: "invalid" },
+          { offsets: { from: 500, to: 1000 }, text: "out of order" },
+          { offsets: { from: 2500, to: 3000 }, text: "Again." },
+        ],
+      }),
+    ).toEqual([
+      { startTime: 1.25, endTime: 2.5, text: "Hello." },
+      { startTime: 2.5, endTime: 3, text: "Again." },
+    ]);
+    expect(parseWhisperSegments(null)).toEqual([]);
+  });
+});
 
 describe("stripVttTimestamps", () => {
   test("strips VTT header and timestamps", () => {
@@ -156,6 +239,22 @@ describe("parseChapters", () => {
       endTime: 60,
     });
     expect(chapters[2]!.title).toBe("Conclusion");
+  });
+
+  test("bounds source chapters to their next section and duration, filling missing ends", () => {
+    expect(
+      parseChapters({
+        duration: 120,
+        chapters: [
+          { title: "  First\n section ", start_time: 0, end_time: 200 },
+          { title: "Second", start_time: 60 },
+          { title: "Outside video", start_time: 130, end_time: 200 },
+        ],
+      }),
+    ).toEqual([
+      { title: "First section", startTime: 0, endTime: 60 },
+      { title: "Second", startTime: 60, endTime: 120 },
+    ]);
   });
 
   test("returns null when no chapters", () => {

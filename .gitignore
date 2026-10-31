@@ -33,3 +33,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# locally installed agent skills
+/.agents/skills/
+/.claude/skills/
+/.codex/skills/
+/.gemini/skills/
+/.gemini/antigravity/skills/
+/.opencode/skills/

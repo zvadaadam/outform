@@ -176,87 +176,43 @@ describe("getPdfOutputPath", () => {
   });
 });
 
-describe("AI summary in formatters", () => {
-  const aiSummary = "This article discusses key themes and provides practical insights.";
-
-  test("web markdown includes summary section when provided", () => {
-    const md = formatWebMarkdown(sampleResult, aiSummary);
-    expect(md).toContain("## Summary");
-    expect(md).toContain(aiSummary);
-    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Content"));
+describe("source-first output", () => {
+  test("web and PDF output omit generated summaries", () => {
+    expect(JSON.parse(formatWebJson(sampleResult))).not.toHaveProperty("summary");
+    expect(JSON.parse(formatPdfJson(samplePdfResult))).not.toHaveProperty("summary");
+    expect(formatWebMarkdown(sampleResult)).not.toContain("## Summary");
+    expect(formatPdfMarkdown(samplePdfResult)).not.toContain("## Summary");
   });
-
-  test("web markdown omits summary when null", () => {
-    const md = formatWebMarkdown(sampleResult, null);
-    expect(md).not.toContain("## Summary");
-  });
-
-  test("web markdown omits summary when undefined", () => {
-    const md = formatWebMarkdown(sampleResult);
-    expect(md).not.toContain("## Summary");
-  });
-
-  test("web JSON includes summary field", () => {
-    const json = formatWebJson(sampleResult, aiSummary);
-    const parsed = JSON.parse(json);
-    expect(parsed.summary).toBe(aiSummary);
-  });
-
-  test("web JSON has null summary when not provided", () => {
-    const json = formatWebJson(sampleResult);
-    const parsed = JSON.parse(json);
-    expect(parsed.summary).toBeNull();
-  });
-
-  test("PDF markdown includes summary section when provided", () => {
-    const md = formatPdfMarkdown(samplePdfResult, aiSummary);
-    expect(md).toContain("## Summary");
-    expect(md).toContain(aiSummary);
-    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Content"));
-  });
-
-  test("PDF markdown omits summary when null", () => {
-    const md = formatPdfMarkdown(samplePdfResult, null);
-    expect(md).not.toContain("## Summary");
-  });
-
-  test("PDF JSON includes summary field", () => {
-    const json = formatPdfJson(samplePdfResult, aiSummary);
-    const parsed = JSON.parse(json);
-    expect(parsed.summary).toBe(aiSummary);
-  });
-
-  const sampleYouTubeResult: YouTubeResult = {
-    title: "Test Video",
-    channel: "Test Channel",
-    description: "A test video",
-    source: "https://youtube.com/watch?v=test123",
+  const video: YouTubeResult = {
+    videoId: "test123",
+    author: "Test channel",
+    channelId: null,
+    channelUrl: null,
+    thumbnail: null,
+    uploadDate: null,
+    title: "Test video",
+    channel: "Test channel",
+    description: "Publisher's description",
+    source: "https://www.youtube.com/watch?v=test123",
     duration: 120,
-    chapters: null,
-    transcript: "Hello world, this is a test transcript.",
+    chapters: [
+      { title: "Setup", startTime: 0, endTime: 120, description: "The speaker explains the installation steps." },
+    ],
+    chaptersSource: "generated",
+    transcript: "Install the package.",
+    transcriptSource: "captions",
+    transcriptSegments: [{ startTime: 12, endTime: 14, text: "Install the package." }],
+    issues: [],
   };
-
-  test("YouTube markdown includes summary before description", () => {
-    const md = formatYouTubeMarkdown(sampleYouTubeResult, aiSummary);
-    expect(md).toContain("## Summary");
-    expect(md).toContain(aiSummary);
-    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Description"));
-  });
-
-  test("YouTube markdown omits summary when null", () => {
-    const md = formatYouTubeMarkdown(sampleYouTubeResult, null);
-    expect(md).not.toContain("## Summary");
-  });
-
-  test("YouTube JSON includes summary field", () => {
-    const json = formatYouTubeJson(sampleYouTubeResult, aiSummary);
-    const parsed = JSON.parse(json);
-    expect(parsed.summary).toBe(aiSummary);
-  });
-
-  test("YouTube JSON has null summary when not provided", () => {
-    const json = formatYouTubeJson(sampleYouTubeResult);
-    const parsed = JSON.parse(json);
-    expect(parsed.summary).toBeNull();
+  test("labels generated chapter descriptions and preserves source text and timing", () => {
+    const markdown = formatYouTubeMarkdown(video);
+    expect(markdown).toContain("## Chapters (AI-generated)");
+    expect(markdown).toContain("The speaker explains the installation steps.");
+    expect(markdown).toContain("[0:12]");
+    expect(markdown).toContain(video.description);
+    const json = JSON.parse(formatYouTubeJson(video));
+    expect(json).not.toHaveProperty("summary");
+    expect(json.transcriptSegments).toEqual(video.transcriptSegments);
+    expect(json.chaptersSource).toBe("generated");
   });
 });

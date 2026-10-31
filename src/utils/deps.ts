@@ -1,31 +1,38 @@
 import { log } from "./log";
-import { fileExists } from "./process";
-import { access, constants } from "node:fs/promises";
-import { homedir } from "node:os";
+import { hasManagedTool, managedToolTarget, fileSha256, toolEnvironment, toolsDirectory } from "./process";
+import { access, constants, stat } from "node:fs/promises";
 import { delimiter, extname, isAbsolute, join } from "node:path";
 
-export type SetupTarget = "youtube" | "whisper" | "ffmpeg" | "claude" | "codex";
+export type SetupTarget = "youtube" | "whisper" | "ffmpeg" | "deno" | "claude" | "codex";
 
 type HintPlatform = "darwin" | "linux" | "win32";
 
 const INSTALL_HINTS: Record<SetupTarget, Record<HintPlatform, string[]>> = {
+  deno: {
+    darwin: ["outform install deno", "Use macOS x64 or arm64 for the managed Deno runtime"],
+    linux: ["outform install deno", "Use a glibc Linux x64 or arm64 system for the managed Deno runtime"],
+    win32: ["outform install deno", "Use Windows x64 or arm64 for the managed Deno runtime"],
+  },
   youtube: {
-    darwin: ["brew install yt-dlp", "pipx install yt-dlp"],
-    linux: ["outform install youtube", "sudo apt install yt-dlp", "pipx install yt-dlp"],
-    win32: ["winget install yt-dlp", "pip install yt-dlp"],
+    darwin: ["outform install youtube", "Use macOS x64 or arm64 for managed YouTube extraction"],
+    linux: ["outform install youtube", "Use Linux x64 or arm64 for managed YouTube extraction"],
+    win32: ["outform install youtube", "Use Windows x64 or arm64 for managed YouTube extraction"],
   },
   whisper: {
-    darwin: ["brew install whisper-cpp"],
-    linux: [
-      "sudo apt install cmake build-essential",
-      "git clone https://github.com/ggml-org/whisper.cpp && cd whisper.cpp && cmake -B build -DGGML_NATIVE=OFF -DCMAKE_BUILD_TYPE=Release && cmake --build build -j && sudo cmake --install build && sudo ldconfig",
+    darwin: [
+      "outform install whisper",
+      "Install Homebrew from https://brew.sh, then brew install --force-bottle whisper.cpp (requires a compatible bottle for your macOS version and architecture)",
     ],
-    win32: ["Build whisper.cpp from source: https://github.com/ggml-org/whisper.cpp"],
+    linux: [
+      "outform install whisper",
+      "Use glibc Linux x64 or arm64 with tar; on Debian/Ubuntu install runtimes with sudo apt-get update && sudo apt-get install -y libgomp1 libstdc++6",
+    ],
+    win32: ["outform install whisper", "Use Windows x64 for the managed whisper.cpp binary"],
   },
   ffmpeg: {
-    darwin: ["brew install ffmpeg"],
-    linux: ["sudo apt install ffmpeg", "sudo dnf install ffmpeg"],
-    win32: ["winget install ffmpeg"],
+    darwin: ["outform install ffmpeg", "Use macOS x64 or arm64 for managed ffmpeg/ffprobe"],
+    linux: ["outform install ffmpeg", "Use Linux x64 or arm64 for managed ffmpeg/ffprobe"],
+    win32: ["outform install ffmpeg", "Use Windows x64 for managed ffmpeg/ffprobe"],
   },
   claude: {
     darwin: ["npm install -g @anthropic-ai/claude-code"],
@@ -102,13 +109,21 @@ export interface DoctorReport {
     };
     youtube: CapabilityStatus;
     transcription: CapabilityStatus;
-    aiSummary: CapabilityStatus;
+    aiChapters: CapabilityStatus;
   };
   recommendedActions: string[];
 }
 
 function buildTools(): Dependency[] {
   return [
+    {
+      id: "deno",
+      name: "Deno",
+      command: "deno",
+      installHint: "outform install youtube",
+      purpose: "YouTube JavaScript challenges",
+      setupCommand: "outform install youtube",
+    },
     {
       id: "youtube",
       name: "yt-dlp",
@@ -139,7 +154,7 @@ function buildTools(): Dependency[] {
       name: "claude CLI",
       command: "claude",
       installHint: installHintsFor("claude")[0]!,
-      purpose: "AI summarization",
+      purpose: "AI chapter generation",
       setupCommand: "outform install claude",
     },
     {
@@ -147,7 +162,7 @@ function buildTools(): Dependency[] {
       name: "codex CLI",
       command: "codex",
       installHint: installHintsFor("codex")[0]!,
-      purpose: "AI summarization",
+      purpose: "AI chapter generation",
       setupCommand: "outform install codex",
     },
   ];
@@ -167,7 +182,8 @@ const ENV_VARS: EnvVar[] = [
 ];
 
 export async function hasCommand(cmd: string): Promise<boolean> {
-  const pathValue = Object.entries(process.env).find(([key]) => key.toLowerCase() === "path")?.[1];
+  if (managedToolTarget(cmd)) return hasManagedTool(cmd);
+  const pathValue = Object.entries(toolEnvironment()).find(([key]) => key.toLowerCase() === "path")?.[1];
   const pathEntries = isAbsolute(cmd) ? [""] : (pathValue ?? "").split(delimiter);
   const extensions =
     process.platform === "win32" && !extname(cmd) ? (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";") : [""];
@@ -177,7 +193,7 @@ export async function hasCommand(cmd: string): Promise<boolean> {
       const candidate = isAbsolute(cmd) ? cmd : join(directory || ".", cmd + extension);
       try {
         await access(candidate, process.platform === "win32" ? constants.F_OK : constants.X_OK);
-        return true;
+        if ((await stat(candidate)).isFile()) return true;
       } catch {}
     }
   }
@@ -185,31 +201,31 @@ export async function hasCommand(cmd: string): Promise<boolean> {
   return false;
 }
 
-export const WHISPER_MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin";
+export const WHISPER_MODEL_URL =
+  "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin";
+
+export const WHISPER_MODEL_SHA256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002";
 
 export function defaultWhisperModelPath(): string {
-  return join(homedir(), ".cache", "whisper", "ggml-base.en.bin");
+  return join(toolsDirectory(), "models", WHISPER_MODEL_SHA256, "ggml-base.en.bin");
 }
 
 export async function findWhisperModel(): Promise<string | null> {
   const envModel = process.env.WHISPER_MODEL;
   if (envModel) {
-    if (await fileExists(envModel)) return envModel;
+    try {
+      const model = await stat(envModel);
+      return model.isFile() && model.size > 0 ? envModel : null;
+    } catch {
+      return null;
+    }
   }
-
-  const home = process.env.HOME || "";
-  const candidates = [
-    "/opt/homebrew/share/whisper-cpp/models/ggml-base.en.bin",
-    "/usr/local/share/whisper-cpp/models/ggml-base.en.bin",
-    join(home, ".cache/whisper/ggml-base.en.bin"),
-    join(home, ".local/share/whisper-cpp/models/ggml-base.en.bin"),
-  ];
-
-  for (const path of candidates) {
-    if (await fileExists(path)) return path;
+  const path = defaultWhisperModelPath();
+  try {
+    return (await fileSha256(path)) === WHISPER_MODEL_SHA256 ? path : null;
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 export async function probeEnvironment(): Promise<DoctorReport> {
@@ -231,7 +247,8 @@ export async function probeEnvironment(): Promise<DoctorReport> {
 
   const hasYtDlp = tools.find((tool) => tool.id === "youtube")?.found ?? false;
   const hasWhisper = tools.find((tool) => tool.id === "whisper")?.found ?? false;
-  const hasFfmpeg = tools.find((tool) => tool.id === "ffmpeg")?.found ?? false;
+  const hasFfmpeg = (tools.find((tool) => tool.id === "ffmpeg")?.found ?? false) && (await hasCommand("ffprobe"));
+  const hasDeno = tools.find((tool) => tool.id === "deno")?.found ?? false;
   const whisperModel = await findWhisperModel();
 
   const providers: string[] = [];
@@ -248,21 +265,22 @@ export async function probeEnvironment(): Promise<DoctorReport> {
     providers.push("openai-api");
   }
 
-  const youtube: CapabilityStatus = hasYtDlp
-    ? {
-        available: true,
-        status: "ready",
-      }
-    : {
-        available: false,
-        status: "needs_dependency",
-        requires: ["yt-dlp"],
-        setupCommand: "outform install youtube",
-      };
+  const youtube: CapabilityStatus =
+    hasYtDlp && hasDeno
+      ? {
+          available: true,
+          status: "ready",
+        }
+      : {
+          available: false,
+          status: "needs_dependency",
+          requires: [...(!hasYtDlp ? ["yt-dlp"] : []), ...(!hasDeno ? ["deno"] : [])],
+          setupCommand: "outform install youtube",
+        };
 
   const transcriptionMissing: string[] = [];
   if (!hasWhisper) transcriptionMissing.push("whisper.cpp");
-  if (!hasFfmpeg) transcriptionMissing.push("ffmpeg");
+  if (!hasFfmpeg) transcriptionMissing.push("ffmpeg / ffprobe");
   if (!whisperModel) transcriptionMissing.push("whisper model");
 
   const transcription: CapabilityStatus =
@@ -278,7 +296,7 @@ export async function probeEnvironment(): Promise<DoctorReport> {
           setupCommand: "outform install whisper",
         };
 
-  const aiSummary: CapabilityStatus =
+  const aiChapters: CapabilityStatus =
     providers.length > 0
       ? {
           available: true,
@@ -293,19 +311,8 @@ export async function probeEnvironment(): Promise<DoctorReport> {
         };
 
   const recommendedActions: string[] = [];
-  if (!hasYtDlp) {
-    recommendedActions.push("outform install youtube");
-  }
-  if (hasWhisper && !whisperModel) {
-    recommendedActions.push("outform install whisper  # downloads the base.en model");
-  }
-  if (hasWhisper && !hasFfmpeg) {
-    recommendedActions.push("outform install ffmpeg");
-  }
-  if (providers.length === 0) {
-    recommendedActions.push(
-      "outform install codex  # or outform install claude, or set OPENAI_API_KEY / ANTHROPIC_API_KEY",
-    );
+  if (!youtube.available || !transcription.available) {
+    recommendedActions.push("outform install  # prepare all extraction capabilities");
   }
 
   return {
@@ -327,7 +334,7 @@ export async function probeEnvironment(): Promise<DoctorReport> {
       },
       youtube,
       transcription,
-      aiSummary,
+      aiChapters,
     },
     recommendedActions,
   };
@@ -372,18 +379,18 @@ export function formatDoctorReport(report: DoctorReport): string {
   lines.push("    ✓ Web page extraction     (built-in)");
   lines.push("    ✓ PDF extraction          (built-in)");
   lines.push(
-    `    ${report.capabilities.youtube.available ? "✓" : "✗"} YouTube extraction       ${report.capabilities.youtube.available ? "(ready)" : "(needs yt-dlp)"}`,
+    `    ${report.capabilities.youtube.available ? "✓" : "✗"} YouTube extraction       ${report.capabilities.youtube.available ? "(ready)" : `(needs ${(report.capabilities.youtube.requires ?? []).join(" + ")})`}`,
   );
   lines.push(
     `    ${report.capabilities.transcription.available ? "✓" : "✗"} Audio transcription      ${report.capabilities.transcription.available ? "(ready)" : `(needs ${(report.capabilities.transcription.requires ?? []).join(" + ")})`}`,
   );
   lines.push(
-    `    ${report.capabilities.aiSummary.available ? "✓" : "✗"} AI summarization        ${report.capabilities.aiSummary.available ? "(ready)" : "(needs AI provider)"}`,
+    `    ${report.capabilities.aiChapters.available ? "✓" : "✗"} AI chapter generation        ${report.capabilities.aiChapters.available ? "(ready)" : "(needs AI provider)"}`,
   );
 
-  if (report.capabilities.aiSummary.providers && report.capabilities.aiSummary.providers.length > 0) {
+  if (report.capabilities.aiChapters.providers && report.capabilities.aiChapters.providers.length > 0) {
     lines.push("");
-    lines.push(`  AI providers: ${report.capabilities.aiSummary.providers.join(", ")}`);
+    lines.push(`  AI providers: ${report.capabilities.aiChapters.providers.join(", ")}`);
   }
 
   if (report.recommendedActions.length > 0) {

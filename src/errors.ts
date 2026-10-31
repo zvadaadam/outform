@@ -7,14 +7,17 @@ export type OutformErrorCode =
   | "NO_AI_PROVIDER"
   | "UNKNOWN_SETUP_TARGET"
   | "SETUP_FAILED"
-  | "EXTRACTION_FAILED";
+  | "FEEDBACK_FAILED"
+  | "EXTRACTION_FAILED"
+  | "TRANSCRIPT_UNAVAILABLE"
+  | "CHAPTER_GENERATION_FAILED";
 
 export interface OutformIssue {
   code: OutformErrorCode;
   message: string;
   url?: string;
   urlType?: UrlType | null;
-  capability?: "input" | "web" | "pdf" | "youtube" | "aiSummary" | "setup";
+  capability?: "input" | "web" | "pdf" | "youtube" | "aiChapters" | "transcription" | "setup" | "feedback";
   dependency?: string;
   provider?: string;
   setupTarget?: string;
@@ -69,7 +72,7 @@ export function missingDependencyIssue(input: {
   message?: string;
   url?: string;
   urlType?: UrlType | null;
-  capability: "youtube" | "aiSummary" | "setup";
+  capability: "youtube" | "aiChapters" | "setup";
   dependency: string;
   setupTarget: string;
   installHints: string[];
@@ -102,10 +105,10 @@ export function noAiProviderIssue(
     code: "NO_AI_PROVIDER",
     message:
       input.message ??
-      "No AI provider available for summaries. Install claude/codex or set ANTHROPIC_API_KEY / OPENAI_API_KEY.",
+      "No AI provider available for chapter generation. Install claude/codex or set ANTHROPIC_API_KEY / OPENAI_API_KEY.",
     url: input.url,
     urlType: input.urlType,
-    capability: "aiSummary",
+    capability: "aiChapters",
     provider: input.provider,
     installHints: input.installHints ?? [
       "outform install claude",
