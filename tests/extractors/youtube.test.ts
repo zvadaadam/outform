@@ -9,6 +9,7 @@ import type { YouTubeResult } from "../../src/extractors/youtube";
 import { findWhisperModel, parseYouTubeMetadata } from "../../src/extractors/youtube";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
 
 const SAMPLE_RESULT: YouTubeResult = {
   videoId: "abc123def45",
@@ -185,15 +186,19 @@ describe("findWhisperModel", () => {
 
   test("returns null when no model is found anywhere", async () => {
     const original = process.env.WHISPER_MODEL;
-    const originalHome = process.env.HOME;
+    const originalTools = process.env.OUTFORM_TOOLS_DIR;
+    const directory = await mkdtemp(join(tmpdir(), "outform-no-model-"));
     delete process.env.WHISPER_MODEL;
-    process.env.HOME = "/tmp/outform-fake-home-nonexistent";
+    process.env.OUTFORM_TOOLS_DIR = directory;
     try {
       const result = await findWhisperModel();
       expect(result).toBeNull();
     } finally {
-      process.env.WHISPER_MODEL = original;
-      process.env.HOME = originalHome;
+      if (original === undefined) delete process.env.WHISPER_MODEL;
+      else process.env.WHISPER_MODEL = original;
+      if (originalTools === undefined) delete process.env.OUTFORM_TOOLS_DIR;
+      else process.env.OUTFORM_TOOLS_DIR = originalTools;
+      await rm(directory, { recursive: true, force: true });
     }
   });
 });

@@ -12,6 +12,7 @@ import {
   recordManagedTool,
   spawn,
   toolPath,
+  verifyWhisperExecutable,
   waitForResult,
 } from "../../src/utils/process";
 import { getSetupPlans, installTargets } from "../../src/setup";
@@ -58,6 +59,19 @@ describe.skipIf(process.platform === "win32")("owned extraction runtimes", () =>
     expect(plans[0]?.installed).toBe(false);
     expect(plans[0]?.steps?.[0]?.kind).toBe("zip");
     expect(await readFile(join(host, "deno"), "utf8")).toContain("deno 1.0.0");
+  });
+
+  test("allows Whisper startup to exceed the old 15-second deadline", async () => {
+    await executable(
+      toolPath("whisper-cli"),
+      '/bin/sleep 16\necho "usage: whisper-cli --model --file --output-json --output-file"',
+    );
+    await expect(verifyWhisperExecutable()).resolves.toBeUndefined();
+  }, 25_000);
+
+  test("identifies a Whisper startup timeout instead of reporting a runtime failure", async () => {
+    await executable(toolPath("whisper-cli"), "exec /bin/sleep 30");
+    await expect(verifyWhisperExecutable(50)).rejects.toThrow("whisper-cli startup timed out after 0.05 seconds");
   });
 
   test("requires a receipt, selects owned executable, and detects changed bytes", async () => {
