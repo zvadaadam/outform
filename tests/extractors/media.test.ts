@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { parseMediaInfo, parseTikTokSlides, parsePinterestGallery } from "../../src/extractors/media";
+import { parseMediaInfo } from "../../src/extractors/media/yt-dlp";
+import { parseTikTokSlides } from "../../src/extractors/media/tiktok";
+import { parsePinterestGallery } from "../../src/extractors/media/pinterest";
 import { formatMediaMarkdown, formatMediaText } from "../../src/output/formatter";
 
 const source = "https://www.instagram.com/p/example/";

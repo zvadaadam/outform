@@ -10,7 +10,7 @@ Give it a URL or local file path and it returns clean Markdown, text, or JSON fo
 npm install -g outform && outform install
 ```
 
-Setup prepares video extraction and downloads an English speech model (148 MB). For web pages, PDFs, and local text files, you can skip `outform install`.
+Setup prepares video extraction and downloads an English speech model (148 MB). For web pages, PDFs, local text files, and supported Spotify podcasts, you can skip `outform install`.
 
 Requires Node 20 (20.16+) or Node 22.3+. macOS video setup also needs [Homebrew](https://brew.sh). Linux setup may ask you to install system runtimes. See [platform requirements](#advanced-setup) or use a [standalone binary](#standalone-binary) without Node.
 
@@ -105,7 +105,15 @@ Social output contains publisher text and media metadata, without OCR, speech tr
 
 Failure messages distinguish explicit private/age/location restrictions (`MEDIA_RESTRICTED`), missing or removed media (`MEDIA_NOT_FOUND`), login requirements (`LOGIN_REQUIRED`), rate limits (`RATE_LIMITED`), and protected streams (`MEDIA_PROTECTED`). A generic access denial does not prove a post is private. Unknown failures say that the cause is unknown and suggest retrying or reporting the URL. A rate limit stops further downloads. Partial downloads print the saved-file count and folder on stderr; the manifest keeps each available file and its issues.
 
-For social downloads alone, `outform install youtube ffmpeg` prepares the shared downloader and media tools without the Whisper model. The `youtube` target also installs Deno for YouTube. YouTube URLs work with `download` too; ordinary YouTube extraction continues to return transcripts.
+Spotify episode and track URLs return available title, description, publisher/artist, date, and cover image. Public podcast episodes can also download their original audio when Spotify exposes a public publisher URL:
+
+```bash
+outform download 'https://open.spotify.com/episode/45m6z2GQIIvert8LxSXcjt' --output ./podcasts
+```
+
+Spotify needs no installed media tools or account. Episodes without a public original retain their metadata with an actionable issue; downloads fail without creating an empty folder. Music downloads, protected streams, previews, shows, and playlists are not supported as downloads. Preview audio is never substituted for a full episode. Podcast audio streams to disk without a duration or file-size cutoff; requests time out after 15 minutes. Spotify output does not include transcripts or generated chapters.
+
+For other social downloads, `outform install youtube ffmpeg` prepares the shared downloader and media tools without the Whisper model. The `youtube` target also installs Deno for YouTube. YouTube URLs work with `download` too; ordinary YouTube extraction continues to return transcripts.
 
 ## Optional chapters
 
@@ -278,7 +286,7 @@ const installPlan = await getInstallPlan("youtube");
 
 YouTube JSON includes `videoId`, `title`, `author`, `channel`, `channelId`, `channelUrl`, `thumbnail`, `uploadDate`, `source`, `duration`, `description`, `chapters`, `chaptersSource` (`source`, `generated`, or `null`), `transcript`, `transcriptSegments` (`startTime`, `endTime`, `text`), `transcriptSource` (`captions`, `whisper`, or `null`), and `issues`. All times are seconds. `author` identifies the publishing channel (falling back to uploader), not an inferred speaker or copyright owner. `uploadDate` is a UTC calendar date (`YYYY-MM-DD`); unavailable optional metadata is `null`. `thumbnail` is the source image URL, not a downloaded image. Thumbnail, channel link, and upload date are also included in Markdown/text. Source descriptions retain their paragraph breaks. Use `extract(videoUrl, { chapters: true })` to request missing chapters. Provider failure leaves extraction usable; inspect `issues` for partial results. `inspect().ready` describes extraction readiness, while `capabilities.aiChapters` describes optional generation readiness.
 
-Social JSON uses `type: "media"` with `platform`, `id`, `title`, `description`, `author`, `source`, `uploadDate`, `media`, `directory`, and `issues`. Each media item has `id`, `index` (1-based source order), `kind` (`image`, `video`, or `audio`), `url`, `thumbnail`, `width`, `height`, `duration` in seconds, and `file`. Unavailable values are `null`; a video URL may be null when separate streams require merging. Downloaded files have absolute paths.
+Social JSON uses `type: "media"` with `platform`, `id`, `title`, `description`, `author`, `thumbnail`, `source`, `uploadDate`, `media`, `directory`, and `issues`. Each media item has `id`, `index` (1-based source order), `kind` (`image`, `video`, or `audio`), `url`, `thumbnail`, `width`, `height`, `duration` in seconds, and `file`. Unavailable values are `null`; a video URL may be null when separate streams require merging. Downloaded files have absolute paths.
 
 ```ts
 import { download } from "outform";
@@ -301,6 +309,10 @@ outform install
 For a specific tool, see [advanced setup](#advanced-setup). For AI provider setup, see [optional chapters](#optional-chapters).
 
 On macOS, Whisper startup can take a minute or two while Metal shaders compile. Outform waits up to two minutes; version 0.2.0 stopped after 15 seconds, so upgrade if setup fails at `using embedded metal library`.
+
+## Extraction layout
+
+`src/extractors/media.ts` coordinates metadata and downloads. Modules in `src/extractors/media/` handle yt-dlp, TikTok photo posts, Pinterest galleries, and Spotify public audio. Providers return shared metadata and transfer instructions; the coordinator owns filenames, manifests, partial results, and cleanup. Direct HTTP transfers share URL validation and download checks. Platforms already handled by yt-dlp do not need separate wrappers. YouTube transcript extraction remains in `youtube.ts`, alongside the existing web and PDF extractors.
 
 ## Feedback
 

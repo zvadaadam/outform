@@ -59,10 +59,11 @@ Commands:
   install                  Prepare extraction tools and model (no target needed)
   install all              Also install both AI CLIs (optional)
   feedback                 Send feedback or a failed-task report; see feedback --help
-  download                 Save public videos, images, and carousel items (no account connection)
+  download                 Save public videos, images, podcast audio, and carousel items (no account connection)
 
 Media downloads:
   Instagram, X/Twitter, TikTok, Pinterest, Facebook, Reddit, Vimeo, and YouTube post/video URLs.
+  Spotify public podcast originals also work, without installed tools; no music or preview downloads.
   Saves media and metadata.json under ./outform-downloads, or --output <directory>.
   Each post gets its own folder. Restricted, removed, or rate-limited posts may be unavailable.
 

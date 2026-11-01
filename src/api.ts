@@ -1,7 +1,7 @@
 import { extractPdf } from "./extractors/pdf";
 import { extractWeb } from "./extractors/web";
 import { extractYouTube } from "./extractors/youtube";
-import { extractMedia, downloadMedia, type MediaResult } from "./extractors/media";
+import { extractMedia, downloadMedia, mediaDependencies, type MediaResult } from "./extractors/media";
 import {
   buildPdfJson,
   buildYouTubeJson,
@@ -22,7 +22,7 @@ import {
 } from "./output/formatter";
 import { detectProvider } from "./ai/provider";
 import { generateChapters } from "./ai/chapters";
-import { detectUrlType, isValidSource, isValidUrl, type UrlType } from "./utils/url";
+import { detectUrlType, mediaPlatform, isValidSource, isValidUrl, type UrlType } from "./utils/url";
 import { hasCommand, installHintsFor, probeEnvironment } from "./utils/deps";
 import {
   OutformError,
@@ -224,13 +224,16 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
   const chaptersRequested = options.chapters ?? false;
   const provider = options.provider ?? "auto";
   if (urlType === "media") {
-    const available = await hasCommand("yt-dlp");
+    const requirements = mediaDependencies(mediaPlatform(url));
+    const missing: string[] = [];
+    for (const dependency of requirements) if (!(await hasCommand(dependency))) missing.push(dependency);
+    const available = missing.length === 0;
     const issues: OutformIssue[] = [];
-    if (!available)
+    for (const dependency of missing)
       issues.push(
         missingDependencyIssue({
           capability: "media",
-          dependency: "yt-dlp",
+          dependency,
           setupTarget: "youtube",
           installHints: ["outform install"],
           url,
@@ -252,7 +255,7 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
         extraction: {
           available,
           capability: "media",
-          ...(!available ? { dependency: "yt-dlp", setupCommand: "outform install" } : {}),
+          ...(!available ? { dependency: missing[0], setupCommand: "outform install youtube" } : {}),
         },
         aiChapters: { requested: chaptersRequested, available: false, capability: "aiChapters", providers: [] },
       },

@@ -2,7 +2,16 @@ import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
 
 export type UrlType = "youtube" | "web" | "pdf" | "media";
-export type MediaPlatform = "instagram" | "x" | "tiktok" | "pinterest" | "facebook" | "reddit" | "vimeo" | "youtube";
+export type MediaPlatform =
+  | "instagram"
+  | "x"
+  | "tiktok"
+  | "pinterest"
+  | "facebook"
+  | "reddit"
+  | "vimeo"
+  | "youtube"
+  | "spotify";
 
 export function mediaPlatform(input: string): MediaPlatform | null {
   let url: URL;
@@ -38,6 +47,8 @@ export function mediaPlatform(input: string): MediaPlatform | null {
   if (["reddit.com", "old.reddit.com"].includes(host) && /\/comments\/[\w]+/.test(path)) return "reddit";
   if (host === "player.vimeo.com" && /^\/video\/\d+(?:\/|$)/.test(path)) return "vimeo";
   if (host === "vimeo.com" && /^\/\d+(?:\/|$)/.test(path)) return "vimeo";
+  if (host === "open.spotify.com" && /^\/(?:embed\/|intl-[a-z]{2}\/)?(?:episode|track)\/[A-Za-z0-9]{22}\/?$/.test(path))
+    return "spotify";
   if (extractYouTubeId(input)) return "youtube";
   return null;
 }

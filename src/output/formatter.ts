@@ -50,8 +50,10 @@ export function formatMediaMarkdown(result: MediaResult): string {
   const lines = [`# ${result.title}`, "", `**Platform:** ${result.platform}`, `**Source:** ${result.source}`];
   if (result.author) lines.push(`**Author:** ${result.author}`);
   if (result.uploadDate) lines.push(`**Uploaded:** ${result.uploadDate}`);
+  if (result.thumbnail) lines.push(`Thumbnail: ${result.thumbnail}`);
   if (result.description) lines.push("", "## Description", "", result.description);
   lines.push("", "## Media", "");
+  if (!result.media.length) lines.push("No public media download is available.");
   for (const asset of result.media) {
     const target = asset.file ?? asset.url;
     lines.push(
@@ -70,6 +72,7 @@ export function formatMediaText(result: MediaResult): string {
   const lines = [result.title, `Platform: ${result.platform}`, `Source: ${result.source}`];
   if (result.author) lines.push(`Author: ${result.author}`);
   if (result.uploadDate) lines.push(`Uploaded: ${result.uploadDate}`);
+  if (result.thumbnail) lines.push(`Thumbnail: ${result.thumbnail}`);
   if (result.description) lines.push("", result.description);
   for (const asset of result.media)
     lines.push(
