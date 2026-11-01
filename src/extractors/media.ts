@@ -194,8 +194,6 @@ async function saveMedia(
   }
   if (options.maxItems !== undefined && result.media.length > options.maxItems)
     throw mediaError(`This post exceeds the ${options.maxItems}-item limit.`, url, "LIMIT_EXCEEDED");
-  if (!result.media.length)
-    throw new OutformError(result.issues[0] ?? mediaError("No public media is available for download.", url).issue);
   const nativeFiles = result.media.some((asset) => asset.kind !== "image");
   const needsFfmpeg =
     options.output === "audio" ||

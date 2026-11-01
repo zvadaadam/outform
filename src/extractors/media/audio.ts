@@ -87,6 +87,7 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
   const audio = streams.find((s) => s.codec_type === "audio");
   const format = record(data) && record(data.format) ? data.format : {};
   const duration = Number(format.duration ?? audio?.duration);
+  const audioDuration = Number(audio?.duration);
   if ((!audio && !video) || !Number.isFinite(duration) || duration <= 0)
     throw mediaError("No playable audio or video with a valid duration was found.", source, "VERIFICATION_FAILED");
   const formats = text(format.format_name).split(",");
@@ -114,6 +115,7 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
   return {
     kind: video ? ("video" as const) : ("audio" as const),
     duration,
+    audioDuration: Number.isFinite(audioDuration) && audioDuration > 0 ? audioDuration : null,
     width: number(video?.width),
     height: number(video?.height),
     hasAudio: !!audio,
@@ -195,7 +197,7 @@ export async function convertMediaAudio(
   if (
     artifact.contentType !== "audio/mpeg" ||
     artifact.hasAudio !== true ||
-    Math.abs((artifact.duration ?? 0) - original.duration) > 0.25
+    Math.abs((artifact.duration ?? 0) - (original.audioDuration ?? original.duration)) > 0.25
   )
     throw mediaError("The converted MP3 does not match the complete source audio.", source, "VERIFICATION_FAILED");
   return { file: output, original, artifact };

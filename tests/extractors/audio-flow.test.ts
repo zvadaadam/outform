@@ -134,6 +134,31 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
     expect(reused.data.media[0].artifact.inputSha256).toBe(asset.artifact.sha256);
   }, 65_000);
 
+  test("preserves the complete audio when its track is shorter than the video", async () => {
+    const f = await fixture();
+    const input = await generated(f.root);
+    const video = join(f.root, "longer-video.mp4");
+    await ffmpeg([
+      "-f",
+      "lavfi",
+      "-i",
+      "color=size=64x64:rate=10:duration=3",
+      "-i",
+      input.audio,
+      "-c:v",
+      "libx264",
+      "-c:a",
+      "copy",
+      video,
+    ]);
+    const result = await f.run(["src/bin.ts", "audio", video, "--output", f.output, "--json"]);
+    expect(result.exit).toBe(0);
+    expect(result.data.issues).toEqual([]);
+    expect(result.data.media[0].sourceMedia.duration).toBe(3);
+    expect(result.data.media[0].artifact.duration).toBeCloseTo(2, 0);
+    expect(result.data.media[0].artifact.verification).toBe("decode");
+  }, 20_000);
+
   test("verified container types distinguish Matroska and WebM independently of the filename", async () => {
     const f = await fixture();
     const input = await generated(f.root);
