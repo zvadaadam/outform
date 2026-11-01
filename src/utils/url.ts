@@ -54,7 +54,9 @@ export function detectUrlType(url: string): UrlType {
   for (const pattern of YOUTUBE_PATTERNS) {
     if (pattern.test(url)) return "youtube";
   }
-  if (mediaPlatform(url)) return "media";
+  const platform = mediaPlatform(url);
+  // A Reddit comments URL can be a text discussion; media download is explicit.
+  if (platform && platform !== "reddit") return "media";
   if (/\.pdf(\?.*)?$/i.test(url)) return "pdf";
   return "web";
 }

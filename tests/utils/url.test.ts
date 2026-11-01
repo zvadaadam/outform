@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { detectUrlType, extractYouTubeId, extractDomain, isValidUrl } from "../../src/utils/url";
+import { detectUrlType, extractYouTubeId, extractDomain, isValidUrl, mediaPlatform } from "../../src/utils/url";
 
 describe("detectUrlType", () => {
   test("detects standard YouTube URLs", () => {
@@ -99,6 +99,15 @@ describe("isValidUrl", () => {
 });
 
 describe("social post routing", () => {
+  test.each(["www.reddit.com", "old.reddit.com", "reddit.com"])(
+    "keeps %s posts readable while allowing explicit downloads",
+    (host) => {
+      const url = `https://${host}/r/test/comments/abc/title/`;
+      expect(detectUrlType(url)).toBe("web");
+      expect(mediaPlatform(url)).toBe("reddit");
+    },
+  );
+
   test.each([
     "https://www.instagram.com/reel/DfAZMAjseOQ/?tracking=1",
     "https://www.instagram.com/creator/p/abc/",
@@ -111,7 +120,6 @@ describe("social post routing", () => {
     "https://pin.it/abc",
     "https://www.facebook.com/video.php?v=123",
     "https://www.facebook.com/creator/videos/123/",
-    "https://old.reddit.com/r/test/comments/abc/title/",
     "https://vimeo.com/123",
   ])("routes %s to media", (url) => expect(detectUrlType(url)).toBe("media"));
 

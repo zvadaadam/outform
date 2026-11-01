@@ -193,12 +193,13 @@ export function parseMediaInfo(info: Info, source: string, platform: MediaPlatfo
       continue;
     }
     const kind = image ? "image" : formats.every((f) => f.vcodec === "none") ? "audio" : "video";
+    const hasAudio = formats.some((format) => format.acodec !== "none");
     const direct = [...formats]
       .reverse()
       .find(
         (f) =>
           (kind === "audio" || f.vcodec !== "none") &&
-          f.acodec !== "none" &&
+          (f.acodec !== "none" || !hasAudio) &&
           /^https?$/.test(text(f.protocol) || "https"),
       );
     media.push({

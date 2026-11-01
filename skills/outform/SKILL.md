@@ -89,7 +89,7 @@ outform --json 'https://www.instagram.com/reel/DfAZMAjseOQ/' # caption and order
 outform download 'https://www.instagram.com/p/BoHk1haB5tM/' --output ./media --json
 ```
 
-Supports public Instagram Reels/photos/carousels, X/Twitter videos, TikTok videos/photo slides, Pinterest videos/images/story pages, and Facebook/Vimeo videos. Reddit video URLs are recognized but may block anonymous requests. No account connection, browser cookies, or yt-dlp user configuration is used. Private, removed, restricted, and rate-limited posts return structured issues; do not promise that every public URL works.
+Supports public Instagram Reels/photos/carousels, X/Twitter videos, TikTok videos/photo slides, Pinterest videos/images/story pages, and Facebook/Vimeo videos. Reddit posts retain ordinary web extraction for readable discussions; use `outform download <reddit-post-url>` explicitly for media. Reddit may block anonymous requests. No account connection, browser cookies, or yt-dlp user configuration is used. Private, removed, restricted, and rate-limited posts return structured issues; do not promise that every public URL works.
 
 Regular social extraction returns publisher text and media links without saving files. It does not transcribe audio, OCR images, or generate chapters. CDN links can expire. `download` saves media plus `metadata.json` in a new post folder beneath `./outform-downloads` or `--output <directory>`. Numbered filenames preserve order; repeated runs never overwrite previous downloads. TikTok photo posts include the slides and available soundtrack. Videos retain available audio and may use MP4/MKV/WebM containers. Limits: 50 items per post, 50 MB per image.
 

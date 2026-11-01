@@ -39,6 +39,43 @@ describe("social media metadata", () => {
     expect(formatMediaText(result)).toContain(source);
   });
 
+  test("returns a direct link for an intentionally silent video", () => {
+    const result = parseMediaInfo(
+      {
+        id: "silent",
+        formats: [
+          { url: "https://cdn.example/small.mp4", protocol: "https", vcodec: "h264", acodec: "none" },
+          { url: "https://cdn.example/full.mp4", protocol: "https", vcodec: "h264", acodec: "none" },
+        ],
+      },
+      source,
+      "instagram",
+    );
+    expect(result.media[0]?.kind).toBe("video");
+    expect(result.media[0]?.url).toBe("https://cdn.example/full.mp4");
+    expect(formatMediaMarkdown(result)).toContain("https://cdn.example/full.mp4");
+  });
+
+  test("does not present a silent stream as the full video when separate audio exists", () => {
+    const formats = [
+      { url: "https://cdn.example/audio.m4a", protocol: "https", vcodec: "none", acodec: "aac" },
+      { url: "https://cdn.example/video.mp4", protocol: "https", vcodec: "h264", acodec: "none" },
+    ];
+    expect(parseMediaInfo({ formats }, source, "instagram").media[0]?.url).toBeNull();
+    expect(
+      parseMediaInfo(
+        {
+          formats: [
+            { url: "https://cdn.example/complete.mp4", protocol: "https", vcodec: "h264", acodec: "aac" },
+            ...formats,
+          ],
+        },
+        source,
+        "instagram",
+      ).media[0]?.url,
+    ).toBe("https://cdn.example/complete.mp4");
+  });
+
   test("uses the selected original instead of a small thumbnail", () => {
     const result = parseMediaInfo(
       { ...image, thumbnail: "https://cdn.example/original.jpg", title: "Video by creator" },
