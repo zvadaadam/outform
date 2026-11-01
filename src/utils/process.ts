@@ -158,11 +158,17 @@ export async function hasManagedTool(command: string): Promise<boolean> {
   }
 }
 
-export async function verifyWhisperExecutable(): Promise<void> {
+export async function verifyWhisperExecutable(timeoutMs = 120_000): Promise<void> {
   const proc = spawn(["whisper-cli", "--help"]);
-  const timer = setTimeout(() => proc.kill(), 15_000);
+  // Homebrew loads Metal before parsing --help; shader compilation can exceed 15 seconds.
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill();
+  }, timeoutMs);
   try {
     const result = await waitForResult(proc);
+    if (timedOut) throw new Error(`whisper-cli startup timed out after ${timeoutMs / 1000} seconds.`);
     if (result.exitCode !== 0) throw new Error(`whisper-cli could not run: ${result.stderr.trim()}`);
     const output = result.stdout + "\n" + result.stderr;
     if (!["usage:", "--model", "--file", "--output-json", "--output-file"].every((flag) => output.includes(flag))) {

@@ -465,7 +465,14 @@ async function runSetupStep(step: SetupStep): Promise<void> {
 }
 
 async function verifyTool(target: SetupTarget): Promise<void> {
-  if (target === "whisper") return verifyWhisperExecutable();
+  if (target === "whisper") {
+    logProgress(
+      process.platform === "darwin"
+        ? "Checking Whisper; Metal startup may take a minute or two..."
+        : "Checking Whisper runtime...",
+    );
+    return verifyWhisperExecutable();
+  }
   const config = SETUP_CONFIGS[target];
   const command = config.command;
   const commands = target === "ffmpeg" ? ["ffmpeg", "ffprobe"] : [command];

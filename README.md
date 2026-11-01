@@ -266,6 +266,8 @@ outform install
 
 For a specific tool, see [advanced setup](#advanced-setup). For AI provider setup, see [optional chapters](#optional-chapters).
 
+On macOS, Whisper startup can take a minute or two while Metal shaders compile. Outform waits up to two minutes; version 0.2.0 stopped after 15 seconds, so upgrade if setup fails at `using embedded metal library`.
+
 ## Feedback
 
 Humans and agents can report bugs, confusing behavior, or something that worked well through [Hivenet](https://hivenet.app/p/outform), without an account or key:
