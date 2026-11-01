@@ -15,6 +15,18 @@ if [ -n "$OUTFORM_TEST_FAILURE" ]; then
   printf '%s\\n' "ERROR: $OUTFORM_TEST_FAILURE" >&2
   exit 1
 fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) shift; output="$1" ;;
+    --load-info-json) downloading=1 ;;
+  esac
+  shift
+done
+if [ -n "$downloading" ]; then
+  printf 'incomplete video' > "$(/usr/bin/dirname "$output")/media.mp4"
+  printf '%s\\n' 'ERROR: fragment 3 not found, unable to continue' >&2
+  exit 1
+fi
 /bin/cat "$OUTFORM_TEST_METADATA"
 `;
 
@@ -22,8 +34,10 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-async function fixture(entries: unknown[]) {
-  const tools = await createManagedTools(["yt-dlp"], { "yt-dlp": downloader });
+async function fixture(entries: unknown[], videoTools = false, metadataOverrides: Record<string, unknown> = {}) {
+  const tools = await createManagedTools(videoTools ? ["yt-dlp", "ffmpeg", "ffprobe"] : ["yt-dlp"], {
+    "yt-dlp": downloader,
+  });
   roots.push(tools.root);
   const metadata = join(tools.root, "source.json");
   await writeFile(
@@ -34,7 +48,21 @@ async function fixture(entries: unknown[]) {
       description: "The full caption.",
       uploader: "Creator",
       entries,
+      ...metadataOverrides,
     }),
+  );
+  const preload = join(tools.root, "local-network-fixture.ts");
+  await writeFile(
+    preload,
+    `import { mock } from "bun:test";
+    mock.module(${JSON.stringify(resolve("src/utils/public-fetch.ts"))}, () => ({ publicFetch: async (url, options) => {
+      const failure = process.env.OUTFORM_TEST_PAGE_FAILURE;
+      if (failure === "network") throw new Error("fetch failed: internal details");
+      if (failure === "body") return new Response(new ReadableStream({start(controller) { controller.error(new Error("body failure")); }}));
+      if (failure === "invalid") return new Response('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__">{broken}</script>');
+      if (failure) return new Response("Unavailable", {status:Number(failure)});
+      return globalThis.fetch(url, options);
+    } }));`,
   );
   const calls = join(tools.root, "calls");
   const env = {
@@ -45,7 +73,7 @@ async function fixture(entries: unknown[]) {
     OUTFORM_TEST_CALLS: calls,
   };
   const run = async (args: string[], overrides = {}) => {
-    const proc = Bun.spawn([process.execPath, ...args], {
+    const proc = Bun.spawn([process.execPath, "--preload", preload, ...args], {
       stdout: "pipe",
       stderr: "pipe",
       env: { ...env, ...overrides },
@@ -234,6 +262,56 @@ describe("social CLI and API downloads", () => {
     } finally {
       server.stop(true);
     }
+  });
+
+  test.each([
+    ["pinterest", "429", "RATE_LIMITED", "Wait a few minutes"],
+    ["tiktok", "429", "RATE_LIMITED", "Wait a few minutes"],
+    ["pinterest", "403", "MEDIA_RESTRICTED", "denied access"],
+    ["tiktok", "403", "MEDIA_RESTRICTED", "denied access"],
+    ["pinterest", "network", "MEDIA_UNAVAILABLE", "Check your connection"],
+    ["tiktok", "network", "MEDIA_UNAVAILABLE", "Check your connection"],
+    ["pinterest", "body", "MEDIA_UNAVAILABLE", "could not be read completely"],
+    ["tiktok", "body", "MEDIA_UNAVAILABLE", "could not be read completely"],
+    ["pinterest", "invalid", "MEDIA_UNAVAILABLE", "unreadable gallery metadata"],
+    ["tiktok", "invalid", "MEDIA_UNAVAILABLE", "unreadable photo metadata"],
+  ])("explains supplemental %s page failure: %s", async (platform, failure, code, message) => {
+    const f = await fixture([], false, { id: "123" });
+    const url =
+      platform === "pinterest" ? "https://www.pinterest.com/pin/123/" : "https://www.tiktok.com/@creator/photo/123";
+    const result = await f.run(["src/bin.ts", "download", url, "--json"], { OUTFORM_TEST_PAGE_FAILURE: failure });
+    expect(result.exit).toBe(1);
+    expect(result.data.issues[0].code).toBe(code);
+    expect(result.data.issues[0].message).toContain(message);
+    expect(result.data.issues[0].message).not.toContain("internal details");
+  });
+
+  test("rejects incomplete segmented video and removes staged files", async () => {
+    const f = await fixture(
+      [
+        {
+          id: "video",
+          formats: [{ url: "https://cdn.example/video.m3u8", protocol: "m3u8_native", vcodec: "h264", acodec: "aac" }],
+        },
+      ],
+      true,
+    );
+    const result = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+    expect(result.exit).toBe(1);
+    expect(result.data.media[0].file).toBeNull();
+    expect(result.data.issues[0].code).toBe("DOWNLOAD_FAILED");
+    expect(result.data.issues[0].message).toContain("segment was unavailable");
+    expect(await readdir(result.data.directory)).toEqual(["metadata.json"]);
+    expect(await readFile(f.calls, "utf8")).toContain("--abort-on-unavailable-fragments");
+  });
+
+  test("YouTube download reports missing Deno with the installation command", async () => {
+    const f = await fixture([]);
+    const result = await f.run(["src/bin.ts", "download", "https://youtu.be/abc123def45", "--json"]);
+    expect(result.exit).toBe(1);
+    expect(result.data.issues[0].code).toBe("MISSING_DEPENDENCY");
+    expect(result.data.issues[0].dependency).toBe("deno");
+    expect(result.data.issues[0].setupCommand).toBe("outform install youtube");
   });
 
   test("video downloads report missing ffmpeg before creating output", async () => {

@@ -3,6 +3,7 @@ import { dirname, extname, join, resolve } from "node:path";
 import { createWriteStream } from "node:fs";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { publicFetch } from "../utils/public-fetch";
 import { hasCommand } from "../utils/deps";
 import { spawn, toolPath, waitForResult } from "../utils/process";
 import { mediaPlatform, type MediaPlatform } from "../utils/url";
@@ -70,6 +71,12 @@ function mediaError(message: string, url: string, code: OutformIssue["code"] = "
 }
 function sourceFailure(stderr: string, url: string): OutformError {
   // Classify explicit site responses; a generic 403 does not prove a post is private.
+  if (/fragment.*(?:not found|unable to continue)/i.test(stderr))
+    return mediaError(
+      "The video download stopped because a segment was unavailable. No incomplete video was saved. Retry the original post URL later.",
+      url,
+      "DOWNLOAD_FAILED",
+    );
   if (/\b429\b|too many requests|rate[ -]?limit|try again in a few minutes/i.test(stderr))
     return mediaError(
       "The site is limiting requests from this connection. Wait a few minutes before retrying; repeated attempts may extend the limit.",
@@ -290,6 +297,27 @@ export function parsePinterestGallery(data: Info): Info[] | null {
   return entries;
 }
 
+async function fetchMediaPage(input: string | URL, headers: Record<string, string>, source: string): Promise<string> {
+  let response: Response;
+  try {
+    response = await publicFetch(input, { headers, signal: AbortSignal.timeout(30_000) });
+  } catch {
+    throw mediaError(
+      "Could not reach the media page. Check your connection and retry later; only public media servers are allowed.",
+      source,
+    );
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw sourceFailure(`HTTP ${response.status}`, source);
+  }
+  try {
+    return await response.text();
+  } catch {
+    throw mediaError("The media page could not be read completely. Retry the original post URL later.", source);
+  }
+}
+
 async function loadMedia(url: string, logger: ExtractLogger): Promise<{ result: MediaResult; entries: Info[] }> {
   const platform = mediaPlatform(url);
   if (!platform)
@@ -304,6 +332,17 @@ async function loadMedia(url: string, logger: ExtractLogger): Promise<{ result: 
         dependency: "yt-dlp",
         setupTarget: "youtube",
         installHints: ["outform install"],
+        url,
+        urlType: "media",
+      }),
+    );
+  if (platform === "youtube" && !(await hasCommand("deno")))
+    throw new OutformError(
+      missingDependencyIssue({
+        capability: "media",
+        dependency: "deno",
+        setupTarget: "youtube",
+        installHints: ["outform install youtube"],
         url,
         urlType: "media",
       }),
@@ -340,12 +379,16 @@ async function loadMedia(url: string, logger: ExtractLogger): Promise<{ result: 
   }
   if (!record(info)) throw mediaError("The site returned no public media metadata.", url);
   if (platform === "tiktok" && (/\/photo\//.test(url) || records(info.formats).every((f) => f.vcodec === "none"))) {
-    const response = await fetch(httpUrl(info.webpage_url) ?? request, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw mediaError(`TikTok photo page returned HTTP ${response.status}.`, url);
-    const slides = parseTikTokSlides(await response.text());
+    const html = await fetchMediaPage(httpUrl(info.webpage_url) ?? request, { "User-Agent": "Mozilla/5.0" }, url);
+    let slides: Info[];
+    try {
+      slides = parseTikTokSlides(html);
+    } catch {
+      throw mediaError(
+        "TikTok returned unreadable photo metadata. Retry later; if it persists, report the public post URL with outform feedback.",
+        url,
+      );
+    }
     if (!slides.length)
       throw mediaError("TikTok did not expose this photo post anonymously. No slideshow images were downloaded.", url);
     // A photo post's sole yt-dlp format is its soundtrack, not a video of the slides.
@@ -357,14 +400,21 @@ async function loadMedia(url: string, logger: ExtractLogger): Promise<{ result: 
       "data",
       JSON.stringify({ options: { id: info.id, field_set_key: "unauth_react_main_pin" } }),
     );
-    const response = await fetch(endpoint, {
-      headers: { "User-Agent": "Mozilla/5.0", "X-Pinterest-PWS-Handler": "www/[username].js" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok)
-      throw mediaError(`Could not check Pinterest gallery completeness (HTTP ${response.status}).`, url);
-    const payload = (await response.json()) as { resource_response?: { data?: unknown } };
-    const data = payload.resource_response?.data;
+    const body = await fetchMediaPage(
+      endpoint,
+      { "User-Agent": "Mozilla/5.0", "X-Pinterest-PWS-Handler": "www/[username].js" },
+      url,
+    );
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      throw mediaError(
+        "Pinterest returned unreadable gallery metadata. Retry later; if it persists, report the public post URL with outform feedback.",
+        url,
+      );
+    }
+    const data = record(payload) && record(payload.resource_response) ? payload.resource_response.data : null;
     if (!record(data)) throw mediaError("Pinterest did not expose the post's media list anonymously.", url);
     const gallery = parsePinterestGallery(data);
     if (gallery) info.entries = gallery;
@@ -383,7 +433,7 @@ export async function extractMedia(url: string, logger: ExtractLogger = silentLo
 
 async function downloadImage(asset: MediaAsset, directory: string, referer: string): Promise<string> {
   if (!asset.url) throw new Error("No image URL was returned.");
-  const response = await fetch(asset.url, {
+  const response = await publicFetch(asset.url, {
     headers: { "User-Agent": "Mozilla/5.0", Referer: referer },
     signal: AbortSignal.timeout(60_000),
   });
@@ -489,6 +539,9 @@ export async function downloadMedia(
             join(stage, "info.json"),
             "--no-playlist",
             "--no-simulate",
+            "--abort-on-unavailable-fragments",
+            "--fragment-retries",
+            "1",
             "--ffmpeg-location",
             dirname(toolPath("ffmpeg")),
             "--merge-output-format",
