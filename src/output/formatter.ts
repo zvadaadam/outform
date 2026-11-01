@@ -3,6 +3,7 @@ import { extractDomain, hashString } from "../utils/url";
 import type { WebResult } from "../extractors/web";
 import type { PdfResult } from "../extractors/pdf";
 import type { YouTubeResult, YouTubeMetadata } from "../extractors/youtube";
+import type { MediaResult } from "../extractors/media";
 import type { OutformIssue } from "../errors";
 import { formatTimestamp } from "../utils/vtt";
 import { tmpdir } from "node:os";
@@ -35,6 +36,52 @@ export interface YouTubeJsonOutput extends YouTubeMetadata {
   transcriptSource: YouTubeResult["transcriptSource"];
   chaptersSource: YouTubeResult["chaptersSource"];
   issues: OutformIssue[];
+}
+
+export interface MediaJsonOutput extends MediaResult {
+  type: "media";
+}
+
+export function buildMediaJson(result: MediaResult): MediaJsonOutput {
+  return { type: "media", ...result };
+}
+
+export function formatMediaMarkdown(result: MediaResult): string {
+  const lines = [`# ${result.title}`, "", `**Platform:** ${result.platform}`, `**Source:** ${result.source}`];
+  if (result.author) lines.push(`**Author:** ${result.author}`);
+  if (result.uploadDate) lines.push(`**Uploaded:** ${result.uploadDate}`);
+  if (result.thumbnail) lines.push(`Thumbnail: ${result.thumbnail}`);
+  if (result.description) lines.push("", "## Description", "", result.description);
+  lines.push("", "## Media", "");
+  if (!result.media.length) lines.push("No public media download is available.");
+  for (const asset of result.media) {
+    const target = asset.file ?? asset.url;
+    lines.push(
+      `${asset.index}. **${asset.kind}**${asset.width && asset.height ? ` (${asset.width}×${asset.height})` : ""}${asset.duration !== null ? ` — ${formatTimestamp(asset.duration)}` : ""}`,
+    );
+    if (target) lines.push(`   ${target}`);
+    else lines.push("   Use `outform download` to save this media.");
+    if (asset.thumbnail && asset.kind !== "image") lines.push(`   Thumbnail: ${asset.thumbnail}`);
+  }
+  if (result.directory) lines.push("", `Saved to: ${result.directory}`);
+  for (const issue of result.issues) lines.push("", `Note: ${issue.message}`);
+  return lines.join("\n") + "\n";
+}
+
+export function formatMediaText(result: MediaResult): string {
+  const lines = [result.title, `Platform: ${result.platform}`, `Source: ${result.source}`];
+  if (result.author) lines.push(`Author: ${result.author}`);
+  if (result.uploadDate) lines.push(`Uploaded: ${result.uploadDate}`);
+  if (result.thumbnail) lines.push(`Thumbnail: ${result.thumbnail}`);
+  if (result.description) lines.push("", result.description);
+  for (const asset of result.media)
+    lines.push(
+      "",
+      `${asset.index}. ${asset.kind}: ${asset.file ?? asset.url ?? "Use outform download to save this media."}`,
+    );
+  if (result.directory) lines.push("", `Saved to: ${result.directory}`);
+  for (const issue of result.issues) lines.push(`Note: ${issue.message}`);
+  return lines.join("\n") + "\n";
 }
 
 export function buildWebJson(result: WebResult): WebJsonOutput {

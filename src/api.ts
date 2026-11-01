@@ -1,6 +1,7 @@
 import { extractPdf } from "./extractors/pdf";
 import { extractWeb } from "./extractors/web";
 import { extractYouTube } from "./extractors/youtube";
+import { extractMedia, downloadMedia, mediaDependencies, type MediaResult } from "./extractors/media";
 import {
   buildPdfJson,
   buildYouTubeJson,
@@ -14,11 +15,15 @@ import {
   type PdfJsonOutput,
   type YouTubeJsonOutput,
   type WebJsonOutput,
+  buildMediaJson,
+  formatMediaMarkdown,
+  formatMediaText,
+  type MediaJsonOutput,
 } from "./output/formatter";
 import { detectProvider } from "./ai/provider";
 import { generateChapters } from "./ai/chapters";
-import { detectUrlType, isValidSource, isValidUrl, type UrlType } from "./utils/url";
-import { installHintsFor, probeEnvironment } from "./utils/deps";
+import { detectUrlType, mediaPlatform, isValidSource, isValidUrl, type UrlType } from "./utils/url";
+import { hasCommand, installHintsFor, probeEnvironment } from "./utils/deps";
 import {
   OutformError,
   invalidOptionsIssue,
@@ -31,7 +36,7 @@ import { silentLogger, logError, type ExtractLogger } from "./utils/log";
 
 export type ExtractFormat = "md" | "txt" | "json";
 export type ExtractProvider = "claude" | "codex" | "none";
-export type ExtractJson = WebJsonOutput | PdfJsonOutput | YouTubeJsonOutput;
+export type ExtractJson = WebJsonOutput | PdfJsonOutput | YouTubeJsonOutput | MediaJsonOutput;
 
 export interface ExtractOptions {
   chapters?: boolean;
@@ -49,7 +54,7 @@ export interface InspectOptions {
 
 export interface InspectCapability {
   available: boolean;
-  capability: "web" | "pdf" | "youtube" | "aiChapters";
+  capability: "web" | "pdf" | "youtube" | "media" | "aiChapters";
   dependency?: string;
   providers?: string[];
   setupCommand?: string;
@@ -86,7 +91,8 @@ interface BaseExtractResult<TType extends UrlType, TJson extends ExtractJson> {
 export type WebExtractResult = BaseExtractResult<"web", WebJsonOutput>;
 export type PdfExtractResult = BaseExtractResult<"pdf", PdfJsonOutput>;
 export type YouTubeExtractResult = BaseExtractResult<"youtube", YouTubeJsonOutput>;
-export type ExtractResult = WebExtractResult | PdfExtractResult | YouTubeExtractResult;
+export type MediaExtractResult = BaseExtractResult<"media", MediaJsonOutput>;
+export type ExtractResult = WebExtractResult | PdfExtractResult | YouTubeExtractResult | MediaExtractResult;
 
 const PROBE_HEADERS = {
   "User-Agent":
@@ -217,6 +223,44 @@ export async function inspect(url: string, options: InspectOptions = {}): Promis
   const urlType = options.urlType ?? (await resolveUrlType(url));
   const chaptersRequested = options.chapters ?? false;
   const provider = options.provider ?? "auto";
+  if (urlType === "media") {
+    const requirements = mediaDependencies(mediaPlatform(url));
+    const missing: string[] = [];
+    for (const dependency of requirements) if (!(await hasCommand(dependency))) missing.push(dependency);
+    const available = missing.length === 0;
+    const issues: OutformIssue[] = [];
+    for (const dependency of missing)
+      issues.push(
+        missingDependencyIssue({
+          capability: "media",
+          dependency,
+          setupTarget: "youtube",
+          installHints: ["outform install"],
+          url,
+          urlType,
+        }),
+      );
+    if (chaptersRequested) issues.push(invalidOptionsIssue("Chapter generation is supported for YouTube videos only."));
+    if (options.provider && options.provider !== "none" && !chaptersRequested)
+      issues.push(invalidOptionsIssue("Use provider together with chapters: true."));
+    return {
+      url,
+      valid: true,
+      type: urlType,
+      ready: issues.length === 0,
+      chapters: chaptersRequested,
+      provider,
+      issues,
+      capabilities: {
+        extraction: {
+          available,
+          capability: "media",
+          ...(!available ? { dependency: missing[0], setupCommand: "outform install youtube" } : {}),
+        },
+        aiChapters: { requested: chaptersRequested, available: false, capability: "aiChapters", providers: [] },
+      },
+    };
+  }
   const report = await probeEnvironment();
   const issues: OutformIssue[] = [];
 
@@ -320,6 +364,8 @@ export async function extract(url: string, options: ExtractOptions = {}): Promis
 
   try {
     switch (urlType) {
+      case "media":
+        return mediaExtractResult(url, await extractMedia(url, logger));
       case "web": {
         const result = await extractWeb(url, logger);
         const json = buildWebJson(result);
@@ -390,6 +436,42 @@ export async function extract(url: string, options: ExtractOptions = {}): Promis
       url,
       urlType,
       capability: urlType,
+    });
+  }
+}
+
+function mediaExtractResult(url: string, result: MediaResult): MediaExtractResult {
+  return {
+    type: "media",
+    url,
+    title: result.title,
+    source: result.source,
+    issues: result.issues,
+    markdown: formatMediaMarkdown(result),
+    text: formatMediaText(result),
+    json: buildMediaJson(result),
+  };
+}
+
+export interface DownloadOptions {
+  directory?: string;
+  logger?: ExtractLogger;
+}
+
+/** Save a public post's media and metadata. Does not use accounts or browser cookies. */
+export async function download(url: string, options: DownloadOptions = {}): Promise<MediaExtractResult> {
+  try {
+    return mediaExtractResult(
+      url,
+      await downloadMedia(url, options.directory ?? "./outform-downloads", options.logger),
+    );
+  } catch (error) {
+    throw OutformError.fromUnknown(error, {
+      code: "DOWNLOAD_FAILED",
+      capability: "media",
+      urlType: "media",
+      url,
+      message: "Could not download media.",
     });
   }
 }

@@ -23,6 +23,24 @@ async function collect(proc: ReturnType<typeof Bun.spawn>) {
 }
 
 describe("JS API", () => {
+  test("extracts a readable Reddit text post without media tools", async () => {
+    const html = `<html><head><title>Community garden discussion</title></head><body><article><h1>Community garden discussion</h1>${Array.from({ length: 8 }, (_, i) => `<p>Garden note ${i}: We planted carrots and beans in the community garden. The beds need water every morning, and volunteers are sharing advice about soil preparation and the next harvest.</p>`).join("")}</article></body></html>`;
+    const script = `
+      import { extract, inspect } from "./src/index.ts";
+      globalThis.fetch = async () => new Response(${JSON.stringify(html)}, {headers:{"content-type":"text/html"}});
+      const url = "https://old.reddit.com/r/gardening/comments/abc/community_garden/";
+      console.log(JSON.stringify({inspection:await inspect(url),result:await extract(url)}));
+    `;
+    const { stdout, stderr, exitCode } = await collect(runEval(script, NO_CAPABILITIES_ENV));
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
+    const { inspection, result } = JSON.parse(stdout);
+    expect(inspection.ready).toBe(true);
+    expect(result.type).toBe("web");
+    expect(result.markdown).toContain("We planted carrots and beans");
+    expect(result.issues).toEqual([]);
+  });
+
   test("extract() returns an agent-friendly result and stays quiet by default", async () => {
     const script = `
       import { extract } from "./src/index.ts";

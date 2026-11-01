@@ -1,11 +1,11 @@
 ---
 name: outform
-description: Turn any URL or local file into AI-ready Markdown, plain text, or structured JSON with the outform CLI. Use when a task involves reading, extracting, chaptering, or converting content from a web page, article, PDF, YouTube video, or a local PDF/HTML/Markdown/text file — instead of fetching and parsing pages manually.
+description: Turn any URL or local file into AI-ready Markdown, plain text, or structured JSON with the outform CLI. Use when a task involves reading, extracting, chaptering, or converting content from a web page, article, PDF, YouTube video, public social post, or a local PDF/HTML/Markdown/text file — instead of fetching and parsing pages manually.
 ---
 
 # outform — curl for AI-ready content
 
-`outform` takes a URL or file path and prints clean, readable content. It detects the source type automatically: web pages, PDFs, YouTube videos, and local PDF/HTML/Markdown/text files.
+`outform` takes a URL or file path and prints clean, readable content. It detects the source type automatically: web pages, PDFs, YouTube videos, supported social posts, and local PDF/HTML/Markdown/text files.
 
 Output contract: content on stdout, logs and progress on stderr, non-zero exit code with a stderr message on failure. AI is off by default.
 
@@ -59,7 +59,7 @@ printf '%s\n' 'https://example.com?a=1&b=2' | outform
 | `--json`                           | Structured JSON instead of Markdown                   |
 | `--text`                           | Plain text instead of Markdown                        |
 | `--chapters`                       | Generate missing YouTube topic chapters (optional AI) |
-| `--output <path>`                  | Write to a file instead of stdout                     |
+| `--output <path>`                  | Result file; download parent directory                |
 | `--lang <code>`                    | YouTube caption language (default `en`)               |
 | `--provider <claude\|codex\|none>` | Pin the AI provider for `--chapters`                  |
 
@@ -74,13 +74,32 @@ printf '%s\n' 'https://example.com?a=1&b=2' | outform
 - npm installation and extraction do not download optional tools. Use explicit setup to prepare offline or CI environments.
 - Missing tools never crash the run for other source types; `outform doctor --json` reports exactly what is available.
 
-## Video output
+## YouTube output
 
 Default output preserves title, publisher description, author/channel, channel link, thumbnail URL, upload date, publisher chapters, and timestamped transcript. JSON also includes `videoId`, `channelId`, and `duration`. `author` means the publishing channel/uploader, not an inferred speaker; `uploadDate` is `YYYY-MM-DD` in UTC. Missing optional metadata is `null`; thumbnail images are linked, not downloaded. JSON includes `transcriptSegments` (`startTime`, `endTime`, `text` in seconds), `transcriptSource` (`captions`/`whisper`/`null`), `chaptersSource` (`source`/`generated`/`null`), and `issues`. Source chapters always take precedence. With `--chapters`, missing chapters are generated from timed transcript segments: specific titles, short factual descriptions, and validated segment-based boundaries. No separate summary is generated. Captions are preferred; local Whisper is the fallback. The default model is English-only; `--lang` selects captions.
 
 Use `--chapters` only when topic navigation helps. Existing source chapters are preserved without an AI call. Missing chapters can be generated with short descriptions; these are labeled AI-generated. Provider failures and unavailable transcripts return usable source content with issues, so always check those fields. Generation rejects transcripts over 120,000 serialized characters rather than truncating them.
 
-There is no separate generated summary. The old `--summarize` flag and API `summarize` option were removed. Pinterest, Instagram, and ad-library extractors are not implemented.
+There is no separate generated summary. The old `--summarize` flag and API `summarize` option were removed. Ad-library extraction is not implemented.
+
+## Social posts and downloads
+
+```bash
+outform --json 'https://www.instagram.com/reel/DfAZMAjseOQ/' # caption and ordered media links
+outform download 'https://www.instagram.com/p/BoHk1haB5tM/' --output ./media --json
+```
+
+Supports public Instagram Reels/photos/carousels, X/Twitter videos, TikTok videos/photo slides, Pinterest videos/images/story pages, and Facebook/Vimeo videos. Reddit posts retain ordinary web extraction for readable discussions; use `outform download <reddit-post-url>` explicitly for media. Reddit may block anonymous requests. No account connection, browser cookies, or yt-dlp user configuration is used. Private, removed, restricted, and rate-limited posts return structured issues; do not promise that every public URL works.
+
+Download output supports `--json` or `--text` (mutually exclusive). Regular social extraction returns publisher text and media links without saving files. It does not transcribe audio, OCR images, or generate chapters. CDN links can expire. `download` saves media plus `metadata.json` in a new post folder beneath `./outform-downloads` or `--output <directory>`. Numbered filenames preserve order; repeated runs never overwrite previous downloads. TikTok photo posts include the slides and available soundtrack. Videos retain available audio and may use MP4/MKV/WebM containers. Limits: 50 items per post, 50 MB per image.
+
+JSON has `type: "media"`, `platform`, `id`, `title`, `description`, `author`, `thumbnail`, `source`, `uploadDate`, `media`, `directory`, and `issues`. Each asset has `id`, `index` (1-based), `kind`, `url`, `thumbnail`, `width`, `height`, `duration` (seconds), and `file` (absolute path after download). Missing fields are null; split-stream videos may have no direct URL. Always check `issues` and `file`: partial download failure keeps successful files. Any entry in `issues` causes a nonzero exit, even when every file was saved. Progress goes to stderr, manifest output to stdout.
+
+Errors distinguish `MEDIA_RESTRICTED`, `MEDIA_NOT_FOUND`, `LOGIN_REQUIRED`, `RATE_LIMITED`, and `MEDIA_PROTECTED`; unknown failures remain `MEDIA_UNAVAILABLE` or `DOWNLOAD_FAILED`. Do not infer that a post is private from a generic access denial. Rate limits stop further downloads; wait before retrying. Partial downloads report the saved count and directory on stderr and preserve successful files in the manifest.
+
+Spotify episode/track URLs return available metadata and cover art. `download` supports only podcast episodes with an explicit public original-audio URL, without installed tools or an account. Music, protected episodes, shows, and playlists are not downloadable; previews are never used as substitutes. Unsupported episode/track downloads fail before creating a folder; extraction retains available metadata with an issue. Audio streams to disk with no duration/file-size cap and a 15-minute request timeout. Spotify does not provide transcription or chapter generation.
+
+Use `outform install youtube ffmpeg` for other social downloads without installing Whisper. YouTube URLs also work with `download`; ordinary YouTube extraction retains transcript behavior. JS API: `download(url, { directory: "./media" })` returns the shared result with `json.media` and `issues`. `inspect()` checks local tools, not remote accessibility.
 
 ## JS API
 

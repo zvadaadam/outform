@@ -1,5 +1,5 @@
 import { parseArgs } from "util";
-import { render, resolveUrlType, extract, type ExtractFormat, type ExtractProvider } from "./api";
+import { render, resolveUrlType, extract, download, type ExtractFormat, type ExtractProvider } from "./api";
 import { checkDependencies, getDoctorReport } from "./utils/deps";
 import { createStderrLogger, log, logError, logSuccess } from "./utils/log";
 import { writeOutput } from "./output/formatter";
@@ -27,6 +27,7 @@ Give it a URL or file path. Get back clean content for humans, scripts, and codi
 
 Usage:
   outform <source> [options]
+  outform download <url> [--output <directory>] [--json|--text]
   outform [options]      Read a URL or file path from stdin
   outform doctor [--json]
   outform install [target ...] [--dry-run] [--json]
@@ -45,7 +46,7 @@ Options:
   --json                   Output structured JSON
   --text                   Output plain text
   --chapters               Generate missing YouTube chapters with short descriptions
-  --output <path>          Write result to a file instead of stdout
+  --output <path>          Result file; with download, parent directory for media
   --lang <code>            Caption language for YouTube (default: en)
   --provider <name>        Chapter provider for --chapters (claude|codex|none)
   --format <md|txt|json>   Advanced format override
@@ -58,6 +59,13 @@ Commands:
   install                  Prepare extraction tools and model (no target needed)
   install all              Also install both AI CLIs (optional)
   feedback                 Send feedback or a failed-task report; see feedback --help
+  download                 Save public videos, images, podcast audio, and carousel items (no account connection)
+
+Media downloads:
+  Instagram, X/Twitter, TikTok, Pinterest, Facebook, Reddit, Vimeo, and YouTube post/video URLs.
+  Spotify public podcast originals also work, without installed tools; no music or preview downloads.
+  Saves media and metadata.json under ./outform-downloads, or --output <directory>.
+  Each post gets its own folder. Restricted, removed, or rate-limited posts may be unavailable.
 
 Setup prerequisites:
   macOS: Homebrew with a compatible Whisper bottle.
@@ -77,6 +85,7 @@ Examples:
   outform --chapters 'https://www.youtube.com/watch?v=3mFNpeJQjmw'
   outform ./report.pdf
   outform ./notes.md
+  outform download 'https://www.instagram.com/reel/DfAZMAjseOQ/'
   outform doctor --json
   outform install
   outform install youtube
@@ -297,7 +306,17 @@ export async function run(args: string[]): Promise<void> {
     return;
   }
 
-  const url = positionals[0] ?? (await readUrlFromStdin());
+  const downloading = command === "download";
+  if (downloading && (values.chapters || values.provider || values.raw || positionals.length > 2)) {
+    cliError(
+      new Error(
+        "Use outform download <url> [--output <directory>] [--json|--text]. Chapter and provider options apply to extraction only.",
+      ),
+      values.json,
+    );
+    return;
+  }
+  const url = positionals[downloading ? 1 : 0] ?? (await readUrlFromStdin());
   if (!url) {
     cliError(
       new Error("No source provided. Pass a URL or file path, or pipe one on stdin. Run `outform --help` for usage."),
@@ -334,6 +353,18 @@ export async function run(args: string[]): Promise<void> {
   };
 
   try {
+    if (downloading) {
+      const result = await download(url, { directory: options.output, logger: createStderrLogger() });
+      await emitOutput(render(result, options.format));
+      if (result.issues.length) {
+        const saved = result.json.media.filter((asset) => asset.file).length;
+        logError(
+          `Download incomplete: ${saved} file(s) saved. See the issues in the result. Saved files and metadata: ${result.json.directory}`,
+        );
+        process.exitCode = 1;
+      }
+      return;
+    }
     const urlType = await resolveUrlType(url);
     log(`Detected type: ${urlType}`);
 
