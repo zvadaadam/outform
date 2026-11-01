@@ -147,4 +147,72 @@ describe("social media metadata", () => {
     expect(result.issues).toHaveLength(1);
     expect(parsePinterestGallery({ id: "ordinary" })).toBeNull();
   });
+  test("Pinterest video overlays are not media and original video metadata survives normalization", () => {
+    const gallery = parsePinterestGallery({
+      id: "123",
+      story_pin_data: {
+        pages: [
+          {
+            blocks: [
+              {
+                type: "story_pin_video_block",
+                video: {
+                  video_list: {
+                    low: {
+                      url: "https://cdn.example/low.mp4",
+                      width: 320,
+                      height: 569,
+                      duration: 14900,
+                      thumbnail: "https://cdn.example/low.jpg",
+                    },
+                    high: {
+                      url: "https://cdn.example/high.mp4",
+                      width: 640,
+                      height: 1138,
+                      duration: 14900,
+                      thumbnail: "https://cdn.example/high.jpg",
+                    },
+                  },
+                },
+              },
+              { type: "story_pin_paragraph_block", text: "follow now" },
+            ],
+          },
+          { blocks: [{ type: "story_pin_paragraph_block", text: "Text-only page" }] },
+        ],
+      },
+    });
+    expect(gallery).toHaveLength(1);
+    const result = parseMediaInfo({ entries: gallery }, "https://www.pinterest.com/pin/123/", "pinterest");
+    expect(result.issues).toEqual([]);
+    expect(result.media[0]).toMatchObject({
+      kind: "video",
+      width: 640,
+      height: 1138,
+      duration: 14.9,
+      thumbnail: "https://cdn.example/high.jpg",
+      url: "https://cdn.example/high.mp4",
+    });
+  });
+
+  test("Pinterest missing media blocks still report issues while text overlays are ignored", () => {
+    const gallery = parsePinterestGallery({
+      id: "123",
+      story_pin_data: {
+        pages: [
+          {
+            blocks: [
+              { type: "story_pin_paragraph_block", text: "Overlay" },
+              { type: "story_pin_video_block", video: {} },
+              { type: "story_pin_image_block", image: {} },
+            ],
+          },
+        ],
+      },
+    });
+    expect(gallery).toHaveLength(2);
+    const result = parseMediaInfo({ entries: gallery }, "https://www.pinterest.com/pin/123/", "pinterest");
+    expect(result.media).toEqual([]);
+    expect(result.issues).toHaveLength(2);
+  });
 });

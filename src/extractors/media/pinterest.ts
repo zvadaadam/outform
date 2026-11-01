@@ -19,18 +19,25 @@ export function parsePinterestGallery(data: Info): Info[] | null {
       continue;
     }
     for (const [blockIndex, block] of blocks.entries()) {
+      if (block.type === "story_pin_paragraph_block") continue;
       const id = `${text(data.id)}-${pageIndex + 1}-${blockIndex + 1}`;
       const video = record(block.video) ? block.video : {};
       const variants = record(video.video_list) ? Object.values(video.video_list).filter(record) : [];
-      if (variants.length) {
-        const formats = variants
+      if (record(block.video) || block.type === "story_pin_video_block") {
+        const formats: Info[] = variants
           .filter((v) => httpUrl(v.url) && text(v.url).split("?")[0]?.endsWith(".mp4"))
           .sort((a, b) => (number(a.width) ?? 0) - (number(b.width) ?? 0))
           .map((v, i) => ({ ...v, format_id: String(i), ext: "mp4", protocol: "https" }));
+        const best = formats[formats.length - 1];
+        const durationMs = number(best?.duration);
         entries.push({
           id,
           title: id,
           formats,
+          width: number(best?.width),
+          height: number(best?.height),
+          duration: durationMs === null ? null : durationMs / 1000,
+          thumbnail: httpUrl(best?.thumbnail),
           extractor: "Pinterest",
           webpage_url: `https://www.pinterest.com/pin/${text(data.id)}/`,
         });

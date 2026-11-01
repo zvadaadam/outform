@@ -90,7 +90,7 @@ Read a public post's caption, author, title, date, thumbnails, and ordered media
 outform --json 'https://www.instagram.com/reel/DfAZMAjseOQ/'
 ```
 
-Save the media files and a `metadata.json` manifest:
+Save the media files and a `metadata.json` manifest. Use `--json` or `--text` to select output format:
 
 ```bash
 outform download 'https://www.instagram.com/reel/DfAZMAjseOQ/'
@@ -101,7 +101,7 @@ Each download creates a unique post folder under `./outform-downloads` (or `--ou
 
 Public Instagram Reels, image posts and carousels, X/Twitter videos, TikTok videos and photo posts, Pinterest videos/images/story pages, and Facebook and Vimeo videos are supported. Reddit posts retain ordinary web extraction so text discussions remain readable; use `outform download <reddit-post-url>` explicitly for media. Reddit can block anonymous access. Private, removed, restricted, or rate-limited posts may fail on any platform. Outform does not connect accounts, read browser cookies, or use your yt-dlp configuration.
 
-Social output contains publisher text and media metadata, without OCR, speech transcription, or AI chapters. Regular extraction returns links without saving media; CDN links can expire. Use `download` to keep files. Missing items and failed downloads appear in `issues`; successful files remain available. Downloads exit nonzero when any item fails, including partial results in JSON. `inspect()` checks local extraction tools, not whether the remote post is accessible.
+Social output contains publisher text and media metadata, without OCR, speech transcription, or AI chapters. Regular extraction returns links without saving media; CDN links can expire. Use `download` to keep files. Missing items and failed downloads appear in `issues`; successful files remain available. Downloads exit nonzero whenever `issues` is nonempty, even if every file was saved but metadata is incomplete (for example, a missing Spotify description). JSON and the manifest preserve those partial results. `inspect()` checks local extraction tools, not whether the remote post is accessible.
 
 Failure messages distinguish explicit private/age/location restrictions (`MEDIA_RESTRICTED`), missing or removed media (`MEDIA_NOT_FOUND`), login requirements (`LOGIN_REQUIRED`), rate limits (`RATE_LIMITED`), and protected streams (`MEDIA_PROTECTED`). A generic access denial does not prove a post is private. Unknown failures say that the cause is unknown and suggest retrying or reporting the URL. A rate limit stops further downloads. Partial downloads print the saved-file count and folder on stderr; the manifest keeps each available file and its issues.
 

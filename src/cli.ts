@@ -27,7 +27,7 @@ Give it a URL or file path. Get back clean content for humans, scripts, and codi
 
 Usage:
   outform <source> [options]
-  outform download <url> [--output <directory>] [--json]
+  outform download <url> [--output <directory>] [--json|--text]
   outform [options]      Read a URL or file path from stdin
   outform doctor [--json]
   outform install [target ...] [--dry-run] [--json]
