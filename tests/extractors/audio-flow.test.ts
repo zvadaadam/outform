@@ -134,30 +134,51 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
     expect(reused.data.media[0].artifact.inputSha256).toBe(asset.artifact.sha256);
   }, 65_000);
 
-  test("preserves the complete audio when its track is shorter than the video", async () => {
-    const f = await fixture();
-    const input = await generated(f.root);
-    const video = join(f.root, "longer-video.mp4");
-    await ffmpeg([
-      "-f",
-      "lavfi",
-      "-i",
-      "color=size=64x64:rate=10:duration=3",
-      "-i",
-      input.audio,
-      "-c:v",
-      "libx264",
-      "-c:a",
-      "copy",
-      video,
-    ]);
-    const result = await f.run(["src/bin.ts", "audio", video, "--output", f.output, "--json"]);
-    expect(result.exit).toBe(0);
-    expect(result.data.issues).toEqual([]);
-    expect(result.data.media[0].sourceMedia.duration).toBe(3);
-    expect(result.data.media[0].artifact.duration).toBeCloseTo(2, 0);
-    expect(result.data.media[0].artifact.verification).toBe("decode");
-  }, 20_000);
+  test.each([
+    ["MP4", "mp4", true, 0],
+    ["MKV with duration tags", "mkv", true, 0],
+    ["WebM with duration tags", "webm", true, 0],
+    ["MKV without duration tags", "mkv", false, 0],
+    ["WebM without duration tags", "webm", false, 0],
+    ["MKV with delayed audio", "mkv", true, 1],
+    ["WebM with delayed audio", "webm", true, 1],
+  ] as const)(
+    "preserves shorter audio tracks in %s",
+    async (_label, container, tagged, offset) => {
+      const f = await fixture();
+      const input = await generated(f.root);
+      const video = join(f.root, `longer-video.${container}`);
+      await ffmpeg([
+        "-f",
+        "lavfi",
+        "-i",
+        "color=size=64x64:rate=10:duration=3",
+        "-itsoffset",
+        String(offset),
+        "-i",
+        input.audio,
+        "-c:v",
+        container === "webm" ? "libvpx-vp9" : "libx264",
+        "-c:a",
+        container === "webm" ? "libopus" : "copy",
+        video,
+      ]);
+      if (!tagged) {
+        // Omit duration metadata without changing stream bytes or container offsets.
+        const bytes = await readFile(video);
+        for (let offset = bytes.indexOf("DURATION"); offset !== -1; offset = bytes.indexOf("DURATION", offset + 8))
+          bytes.write("ELAPSED_", offset);
+        await writeFile(video, bytes);
+      }
+      const result = await f.run(["src/bin.ts", "audio", video, "--output", f.output, "--json"]);
+      expect(result.exit).toBe(0);
+      expect(result.data.issues).toEqual([]);
+      expect(result.data.media[0].sourceMedia.duration).toBeCloseTo(3, 0);
+      expect(result.data.media[0].artifact.duration).toBeCloseTo(2, 0);
+      expect(result.data.media[0].artifact.verification).toBe("decode");
+    },
+    20_000,
+  );
 
   test("verified container types distinguish Matroska and WebM independently of the filename", async () => {
     const f = await fixture();

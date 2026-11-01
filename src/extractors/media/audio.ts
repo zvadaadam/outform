@@ -66,7 +66,7 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
       "error",
       ...LOCAL_INPUT,
       "-show_entries",
-      "format=format_name,duration:stream=codec_type,codec_name,width,height,duration:stream_disposition=attached_pic",
+      "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,start_time:stream_disposition=attached_pic:stream_tags=DURATION",
       "-of",
       "json",
       file,
@@ -87,7 +87,20 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
   const audio = streams.find((s) => s.codec_type === "audio");
   const format = record(data) && record(data.format) ? data.format : {};
   const duration = Number(format.duration ?? audio?.duration);
-  const audioDuration = Number(audio?.duration);
+  const tag = record(audio?.tags) ? text(audio.tags.DURATION) : "";
+  const tagged = /^(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)$/.exec(tag);
+  const streamDuration = Number(audio?.duration);
+  const start = Number(audio?.start_time ?? 0);
+  // Matroska's DURATION tag is the track's end timestamp, including any start offset.
+  const taggedDuration = tagged
+    ? +tagged[1]! * 3600 + +tagged[2]! * 60 + +tagged[3]! - (Number.isFinite(start) ? start : 0)
+    : NaN;
+  const audioDuration =
+    Number.isFinite(streamDuration) && streamDuration > 0
+      ? streamDuration
+      : Number.isFinite(taggedDuration) && taggedDuration > 0
+        ? taggedDuration
+        : null;
   if ((!audio && !video) || !Number.isFinite(duration) || duration <= 0)
     throw mediaError("No playable audio or video with a valid duration was found.", source, "VERIFICATION_FAILED");
   const formats = text(format.format_name).split(",");
@@ -115,7 +128,7 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
   return {
     kind: video ? ("video" as const) : ("audio" as const),
     duration,
-    audioDuration: Number.isFinite(audioDuration) && audioDuration > 0 ? audioDuration : null,
+    audioDuration,
     width: number(video?.width),
     height: number(video?.height),
     hasAudio: !!audio,
@@ -194,10 +207,11 @@ export async function convertMediaAudio(
       signal,
     );
   const artifact = await verifyMediaFile(output, "audio", source, { ...options, verification: "decode" }, signal, true);
+  const expectedDuration = original.audioDuration ?? (original.kind === "audio" ? original.duration : null);
   if (
     artifact.contentType !== "audio/mpeg" ||
     artifact.hasAudio !== true ||
-    Math.abs((artifact.duration ?? 0) - (original.audioDuration ?? original.duration)) > 0.25
+    (expectedDuration !== null && Math.abs((artifact.duration ?? 0) - expectedDuration) > 0.25)
   )
     throw mediaError("The converted MP3 does not match the complete source audio.", source, "VERIFICATION_FAILED");
   return { file: output, original, artifact };
