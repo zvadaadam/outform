@@ -334,4 +334,74 @@ describe("social CLI and API downloads", () => {
     expect(result.data.issues[0].code).toBe("MISSING_DEPENDENCY");
     expect(result.data.issues[0].dependency).toBe("yt-dlp");
   });
+  test("audio mode rejects photo-only posts before creating files or requesting FFmpeg", async () => {
+    const f = await fixture([photo("one", "https://cdn.example/photo.jpg")]);
+    const result = await f.run(["src/bin.ts", "download", source, "--audio", "--output", f.output, "--json"]);
+    expect(result.exit).toBe(1);
+    expect(result.data.issues[0].code).toBe("MEDIA_UNAVAILABLE");
+    expect(result.data.issues[0].message).toContain("Photos cannot be converted");
+    expect(await readdir(f.tools.root)).not.toContain("downloads");
+  });
+
+  test("enforces image bytes and item limits, and rejects bytes disguised as an image", async () => {
+    const server = Bun.serve({ port: 0, fetch: () => new Response(png, { headers: { "content-type": "image/png" } }) });
+    try {
+      const f = await fixture([photo("one", server.url.href), photo("two", server.url.href)]);
+      const limited = await f.run([
+        "-e",
+        `import {download} from './src/index.ts';console.log(JSON.stringify((await download(${JSON.stringify(source)}, {directory:${JSON.stringify(f.output)},maxBytes:10})).json))`,
+      ]);
+      expect(limited.data.issues[0].code).toBe("LIMIT_EXCEEDED");
+      expect(limited.data.media.every((asset: { file: string | null }) => asset.file === null)).toBe(true);
+      expect(await readdir(limited.data.directory)).toEqual(["metadata.json"]);
+      const items = await f.run([
+        "-e",
+        `import {download} from './src/index.ts';try {await download(${JSON.stringify(source)}, {directory:${JSON.stringify(f.output)},maxItems:1})} catch(error) {console.log(JSON.stringify(error.issue))}`,
+      ]);
+      expect(items.data.code).toBe("LIMIT_EXCEEDED");
+      server.reload({ fetch: () => new Response("not an image", { headers: { "content-type": "image/png" } }) });
+      const corrupt = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+      expect(corrupt.data.issues[0].code).toBe("VERIFICATION_FAILED");
+      expect(corrupt.data.media[0].file).toBeNull();
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("API cancellation interrupts a stalled HTTP body and retains completed files", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch: (request) =>
+        new URL(request.url).pathname === "/ok"
+          ? new Response(png, { headers: { "content-type": "image/png" } })
+          : new Response(new ReadableStream({ start() {} }), { headers: { "content-type": "image/png" } }),
+    });
+    try {
+      const f = await fixture([
+        photo("one", new URL("/ok", server.url).href),
+        photo("two", new URL("/stall", server.url).href),
+      ]);
+      const result = await f.run([
+        "-e",
+        `import {download} from './src/index.ts'; const controller = new AbortController(); const timer=setTimeout(()=>controller.abort(),1000); try {console.log(JSON.stringify((await download(${JSON.stringify(source)}, {directory:${JSON.stringify(f.output)},signal:controller.signal})).json))} finally {clearTimeout(timer)}`,
+      ]);
+      expect(result.data.media[0].file).toBeString();
+      expect(result.data.media[1].file).toBeNull();
+      expect(result.data.issues[0].code).toBe("DOWNLOAD_CANCELLED");
+      expect(await readdir(result.data.directory)).toHaveLength(2);
+    } finally {
+      server.stop(true);
+    }
+  });
+  test("invalid limits fail before loading or creating media", async () => {
+    const f = await fixture([]);
+    for (const options of [{ maxBytes: 0 }, { maxDuration: -1 }, { maxItems: 1.5 }, { timeoutMs: 2147483648 }]) {
+      const result = await f.run([
+        "-e",
+        `import {download} from './src/index.ts';try { await download(${JSON.stringify(source)},${JSON.stringify(options)}); } catch(error) {console.log(JSON.stringify(error.issue));}`,
+      ]);
+      expect(result.data.code).toBe("INVALID_OPTIONS");
+    }
+    expect(await readdir(f.tools.root)).not.toContain("calls");
+  });
 });

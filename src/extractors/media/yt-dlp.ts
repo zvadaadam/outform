@@ -1,4 +1,4 @@
-import { writeFile, readdir } from "node:fs/promises";
+import { writeFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { spawn, toolPath, waitForResult } from "../../utils/process";
 import type { MediaPlatform } from "../../utils/url";
@@ -14,6 +14,7 @@ import {
   type MediaAsset,
   type ResolvedMedia,
   type MediaTransfer,
+  type MediaSaveOptions,
 } from "./metadata";
 
 function thumbnail(info: Info): Info | undefined {
@@ -27,31 +28,71 @@ function thumbnail(info: Info): Info | undefined {
       (a, b) => (number(b.width) ?? 0) * (number(b.height) ?? 0) - (number(a.width) ?? 0) * (number(a.height) ?? 0),
     )[0];
 }
-async function runDownloader(args: string[], url: string, timeoutMs = 90_000): Promise<string> {
-  const proc = spawn([
-    "yt-dlp",
-    "--ignore-config",
-    "--no-warnings",
-    "--socket-timeout",
-    "20",
-    "--retries",
-    "1",
-    "--extractor-retries",
-    "1",
-    ...args,
-  ]);
-  let expired = false;
+async function runDownloader(
+  args: string[],
+  url: string,
+  timeoutMs = 90_000,
+  options: MediaSaveOptions = {},
+  directory?: string,
+): Promise<string> {
+  const controller = new AbortController();
+  const signal = AbortSignal.any([controller.signal, ...(options.signal ? [options.signal] : [])]);
+  signal.throwIfAborted();
+  const proc = spawn(
+    [
+      "yt-dlp",
+      "--ignore-config",
+      "--no-warnings",
+      "--socket-timeout",
+      "20",
+      "--retries",
+      "1",
+      "--extractor-retries",
+      "1",
+      ...args,
+    ],
+    { signal },
+  );
   const timer = setTimeout(() => {
-    expired = true;
-    proc.kill();
+    controller.abort(
+      mediaError(`Media request timed out after ${timeoutMs / 1000} seconds. Retry later.`, url, "DOWNLOAD_TIMEOUT"),
+    );
   }, timeoutMs);
+  let checking = false;
+  const watcher =
+    directory && options.maxBytes !== undefined
+      ? setInterval(async () => {
+          if (checking) return;
+          checking = true;
+          try {
+            for (const name of await readdir(directory)) {
+              if (name === "info.json") continue;
+              const size = await stat(join(directory, name))
+                .then((info) => info.size)
+                .catch((error) => {
+                  if (error.code === "ENOENT") return 0;
+                  throw error;
+                });
+              if (size > options.maxBytes!)
+                controller.abort(
+                  mediaError(`Media exceeds the ${options.maxBytes}-byte limit.`, url, "LIMIT_EXCEEDED"),
+                );
+            }
+          } catch (error) {
+            controller.abort(error);
+          } finally {
+            checking = false;
+          }
+        }, 100)
+      : undefined;
   try {
     const result = await waitForResult(proc);
-    if (expired) throw mediaError(`Media request timed out after ${timeoutMs / 1000} seconds. Retry later.`, url);
+    signal.throwIfAborted();
     if (result.exitCode !== 0) throw mediaSourceFailure(result.stderr, url);
     return result.stdout;
   } finally {
     clearTimeout(timer);
+    if (watcher) clearInterval(watcher);
   }
 }
 
@@ -117,7 +158,12 @@ export function parseMediaInfo(info: Info, source: string, platform: MediaPlatfo
   };
 }
 
-export async function loadYtDlpInfo(url: string, platform: MediaPlatform, request = url): Promise<Info> {
+export async function loadYtDlpInfo(
+  url: string,
+  platform: MediaPlatform,
+  request = url,
+  signal?: AbortSignal,
+): Promise<Info> {
   if (platform === "vimeo" && new URL(url).hostname !== "player.vimeo.com") {
     const [, id, hash] = new URL(url).pathname.split("/");
     const player = new URL(`https://player.vimeo.com/video/${id}`);
@@ -138,6 +184,8 @@ export async function loadYtDlpInfo(url: string, platform: MediaPlatform, reques
       request,
     ],
     url,
+    90_000,
+    { signal },
   );
   let info: unknown;
   try {
@@ -181,13 +229,23 @@ export function resolveYtDlpInfo(info: Info, url: string, platform: MediaPlatfor
   return { result, transfers };
 }
 
-export async function downloadYtDlpMedia(entry: Info, stage: string, url: string): Promise<string> {
+export async function downloadYtDlpMedia(
+  entry: Info,
+  stage: string,
+  url: string,
+  options: MediaSaveOptions = {},
+): Promise<string> {
   const info = { ...entry };
   for (const key of ["entries", "_filename", "filename", "filepath", "requested_downloads", "__files_to_move"])
     delete info[key];
+  if (options.output === "audio") {
+    for (const key of ["requested_formats", "requested_downloads"]) delete info[key];
+  }
   await writeFile(join(stage, "info.json"), JSON.stringify(info));
-  await runDownloader(
+  const downloaded = await runDownloader(
     [
+      ...(options.output === "audio" ? ["-f", "bestaudio/best"] : []),
+      ...(options.maxBytes === undefined ? [] : ["--max-filesize", String(options.maxBytes)]),
       "--load-info-json",
       join(stage, "info.json"),
       "--no-playlist",
@@ -203,11 +261,17 @@ export async function downloadYtDlpMedia(entry: Info, stage: string, url: string
       join(stage, "media.%(ext)s"),
     ],
     url,
-    15 * 60_000,
+    options.timeoutMs ?? 15 * 60_000,
+    options,
+    stage,
   );
   const names = (await readdir(stage)).filter((name) =>
-    /^media\.(?:mp4|mkv|webm|mov|m4a|mp3|aac|ogg|opus|flv)$/.test(name),
+    /^media\.(?:mp4|mkv|webm|mov|m4a|mp3|aac|ogg|opus|flac|wav|flv)$/.test(name),
   );
-  if (names.length !== 1) throw new Error("Downloader did not produce a complete media file.");
+  if (names.length !== 1) {
+    if (options.maxBytes !== undefined && /File is larger than max-filesize/i.test(downloaded))
+      throw mediaError(`Media exceeds the ${options.maxBytes}-byte limit.`, url, "LIMIT_EXCEEDED");
+    throw new Error("Downloader did not produce a complete media file.");
+  }
   return join(stage, names[0]!);
 }

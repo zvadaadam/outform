@@ -200,8 +200,10 @@ export function spawn(
     stdin?: string;
     cwd?: string;
     env?: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
   },
 ): Proc {
+  opts?.signal?.throwIfAborted();
   const executable = managedToolTarget(cmd[0]!) ? toolPath(cmd[0]!, opts?.env) : cmd[0]!;
   const child = nodeSpawn(executable, cmd.slice(1), {
     stdio: [
@@ -210,8 +212,42 @@ export function spawn(
       opts?.stderr ?? "pipe",
     ],
     cwd: opts?.cwd,
+    detached: !!opts?.signal && process.platform !== "win32",
     env: toolEnvironment(opts?.env),
   });
+
+  const stop = () => {
+    if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+    if (!opts?.signal) {
+      child.kill();
+      return;
+    }
+    if (process.platform === "win32") {
+      const killer = nodeSpawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+      killer.on("error", () => child.kill());
+      killer.on("exit", (code) => {
+        if (code !== 0) child.kill();
+      });
+    } else {
+      const pid = child.pid;
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        /* Already exited. */
+      }
+      const force = setTimeout(() => {
+        try {
+          process.kill(-pid, "SIGKILL");
+        } catch {
+          /* Already exited. */
+        }
+      }, 1000);
+      force.unref();
+    }
+  };
+  opts?.signal?.addEventListener("abort", stop, { once: true });
+  if (opts?.signal?.aborted) stop();
+  child.once("close", () => opts?.signal?.removeEventListener("abort", stop));
 
   let stdinFailed = false;
   if (opts?.stdin !== undefined && child.stdin) {
@@ -230,7 +266,7 @@ export function spawn(
       child.on("close", (code) => resolve(code === 0 && stdinFailed ? 1 : (code ?? 1)));
       child.on("error", () => resolve(1));
     }),
-    kill: () => child.kill(),
+    kill: stop,
   };
 }
 

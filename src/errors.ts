@@ -17,7 +17,11 @@ export type OutformErrorCode =
   | "MEDIA_NOT_FOUND"
   | "MEDIA_PROTECTED"
   | "RATE_LIMITED"
-  | "DOWNLOAD_FAILED";
+  | "DOWNLOAD_FAILED"
+  | "DOWNLOAD_CANCELLED"
+  | "DOWNLOAD_TIMEOUT"
+  | "LIMIT_EXCEEDED"
+  | "VERIFICATION_FAILED";
 
 export interface OutformIssue {
   code: OutformErrorCode;

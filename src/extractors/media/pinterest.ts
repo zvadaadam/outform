@@ -58,8 +58,8 @@ export function parsePinterestGallery(data: Info): Info[] | null {
   return entries;
 }
 
-export async function resolvePinterest(url: string): Promise<ResolvedMedia> {
-  const info = await loadYtDlpInfo(url, "pinterest");
+export async function resolvePinterest(url: string, signal?: AbortSignal): Promise<ResolvedMedia> {
+  const info = await loadYtDlpInfo(url, "pinterest", url, signal);
   if (/^\d+$/.test(text(info.id))) {
     const endpoint = new URL("https://www.pinterest.com/resource/PinResource/get/");
     endpoint.searchParams.set(
@@ -70,6 +70,7 @@ export async function resolvePinterest(url: string): Promise<ResolvedMedia> {
       endpoint,
       { "User-Agent": "Mozilla/5.0", "X-Pinterest-PWS-Handler": "www/[username].js" },
       url,
+      signal,
     );
     let payload: unknown;
     try {

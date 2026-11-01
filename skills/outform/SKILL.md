@@ -59,6 +59,7 @@ printf '%s\n' 'https://example.com?a=1&b=2' | outform
 | `--json`                           | Structured JSON instead of Markdown                   |
 | `--text`                           | Plain text instead of Markdown                        |
 | `--chapters`                       | Generate missing YouTube topic chapters (optional AI) |
+| `--audio`                          | MP3 audio only with the download command              |
 | `--output <path>`                  | Result file; download parent directory                |
 | `--lang <code>`                    | YouTube caption language (default `en`)               |
 | `--provider <claude\|codex\|none>` | Pin the AI provider for `--chapters`                  |
@@ -100,6 +101,24 @@ Errors distinguish `MEDIA_RESTRICTED`, `MEDIA_NOT_FOUND`, `LOGIN_REQUIRED`, `RAT
 Spotify episode/track URLs return available metadata and cover art. `download` supports only podcast episodes with an explicit public original-audio URL, without installed tools or an account. Music, protected episodes, shows, and playlists are not downloadable; previews are never used as substitutes. Unsupported episode/track downloads fail before creating a folder; extraction retains available metadata with an issue. Audio streams to disk with no duration/file-size cap and a 15-minute request timeout. Spotify does not provide transcription or chapter generation.
 
 Use `outform install youtube ffmpeg` for other social downloads without installing Whisper. YouTube URLs also work with `download`; ordinary YouTube extraction retains transcript behavior. JS API: `download(url, { directory: "./media" })` returns the shared result with `json.media` and `issues`. `inspect()` checks local tools, not remote accessibility.
+
+## Audio conversion and verified files
+
+```bash
+outform install youtube ffmpeg
+outform download "VIDEO_URL" --audio --output ./audio --json
+outform audio ./saved-video.mp4 --output ./audio --json
+```
+
+Default downloads keep media; ask for or select audio explicitly when the user wants only sound. Audio mode produces MP3, preferring an available audio-only source. Existing MP3 bytes are preserved; other formats are encoded at 192 kbps. Local `audio` conversion preserves the input and needs only `outform install ffmpeg`. Neither path needs Whisper/AI or uploads files. Existing Spotify music/protected-media restrictions still apply.
+
+Converted files are fully decoded and hashed before publication. Photo items are omitted from audio selection; photo-only inputs, silent videos, and corrupt files fail clearly. Successful items remain available after partial failure; source item indexes remain unchanged. `sourceMedia` retains original media metadata; the saved item is audio with a null direct URL. `artifact.inputSha256` identifies the bytes used as conversion input. Local conversion uses `platform: "local"`.
+
+Saved items expose `artifact`: bytes, SHA-256, actual probed content type/dimensions/duration/audio status when available, and verification level. `decode` means full native decoding; `probe` only inspects streams; `signature` checks image headers; `transport` means original podcast transfer checks when FFprobe is absent. Never claim full decoding from a probe, image signature, or checksum. Unknown metadata is null, unknown MIME is application/octet-stream. Images are not fully decoded.
+
+API: `download(url, {output: "audio", directory, signal, maxBytes, maxDuration, maxItems, timeoutMs})` and `convertAudio(localPath, {directory, signal, maxBytes, maxDuration, timeoutMs})`. Native MP3 conversion always fully decodes; `verification: "decode"` also enables full audio/video decoding for ordinary downloads. Byte bounds apply per acquired input/output; duration bounds use seconds (MP3 padding allows 0.25 seconds). The complete operation defaults to 15 minutes; audio/video have no default duration/byte cap. Existing image/item limits remain.
+
+Ctrl-C/SIGTERM stop native child processes and remove staging files, retaining completed outputs; CLI exits 130/143. `DOWNLOAD_CANCELLED`, `DOWNLOAD_TIMEOUT`, `LIMIT_EXCEEDED`, and `VERIFICATION_FAILED` identify those failures. Before creating a result folder, errors throw; during saving, check the returned issues and files. A cached file should be passed to `convertAudio`, not re-downloaded from its original URL. A hosted caller owns its queue, retention and authorization separately.
 
 ## JS API
 

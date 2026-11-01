@@ -1,7 +1,8 @@
+import type { MediaSaveOptions } from "./extractors/media/metadata";
 import { extractPdf } from "./extractors/pdf";
 import { extractWeb } from "./extractors/web";
 import { extractYouTube } from "./extractors/youtube";
-import { extractMedia, downloadMedia, mediaDependencies, type MediaResult } from "./extractors/media";
+import { extractMedia, downloadMedia, convertAudioFile, mediaDependencies, type MediaResult } from "./extractors/media";
 import {
   buildPdfJson,
   buildYouTubeJson,
@@ -453,7 +454,7 @@ function mediaExtractResult(url: string, result: MediaResult): MediaExtractResul
   };
 }
 
-export interface DownloadOptions {
+export interface DownloadOptions extends MediaSaveOptions {
   directory?: string;
   logger?: ExtractLogger;
 }
@@ -463,7 +464,7 @@ export async function download(url: string, options: DownloadOptions = {}): Prom
   try {
     return mediaExtractResult(
       url,
-      await downloadMedia(url, options.directory ?? "./outform-downloads", options.logger),
+      await downloadMedia(url, options.directory ?? "./outform-downloads", options.logger, options),
     );
   } catch (error) {
     throw OutformError.fromUnknown(error, {
@@ -474,6 +475,16 @@ export async function download(url: string, options: DownloadOptions = {}): Prom
       message: "Could not download media.",
     });
   }
+}
+
+export type AudioOptions = Omit<DownloadOptions, "output" | "maxItems">;
+
+/** Convert an existing local audio/video file to a verified MP3 without fetching its source. */
+export async function convertAudio(path: string, options: AudioOptions = {}): Promise<MediaExtractResult> {
+  return mediaExtractResult(
+    path,
+    await convertAudioFile(path, options.directory ?? "./outform-downloads", options.logger, options),
+  );
 }
 
 export function render(result: ExtractResult, format: ExtractFormat = "md"): string {
