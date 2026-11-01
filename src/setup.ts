@@ -465,14 +465,7 @@ async function runSetupStep(step: SetupStep): Promise<void> {
 }
 
 async function verifyTool(target: SetupTarget): Promise<void> {
-  if (target === "whisper") {
-    logProgress(
-      process.platform === "darwin"
-        ? "Checking Whisper; Metal startup may take a minute or two..."
-        : "Checking Whisper runtime...",
-    );
-    return verifyWhisperExecutable();
-  }
+  if (target === "whisper") return verifyWhisperExecutable();
   const config = SETUP_CONFIGS[target];
   const command = config.command;
   const commands = target === "ffmpeg" ? ["ffmpeg", "ffprobe"] : [command];
@@ -504,6 +497,13 @@ export async function installTargets(targets: SetupTarget[] = EXTRACTION_TARGETS
   for (const target of expandTargets(targets)) {
     const config = SETUP_CONFIGS[target];
     try {
+      if (target === "whisper") {
+        logProgress(
+          process.platform === "darwin"
+            ? "Checking Whisper; Metal startup may take a minute or two..."
+            : "Checking Whisper runtime...",
+        );
+      }
       const plan = await directPlan(target);
       if (plan.steps === null)
         throw new Error(`Automatic install is unavailable on this machine. ${plan.manualHints.join(" | ")}`);
