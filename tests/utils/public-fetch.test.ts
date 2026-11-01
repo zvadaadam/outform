@@ -87,7 +87,7 @@ describe("public media network policy", () => {
       const good = await publicFetch('http://public.example/ok', {signal:AbortSignal.timeout(1000)});
       console.log(JSON.stringify({errors,connected,resolved,body:await good.text()}));
     `;
-    const proc = Bun.spawn(["node", "-e", script], { stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn(["node", "--input-type=module", "-e", script], { stdout: "pipe", stderr: "pipe" });
     const output = await new Response(proc.stdout).text();
     const stderr = await new Response(proc.stderr).text();
     expect(stderr).toBe("");
