@@ -115,17 +115,18 @@ export function parseSpotifyPage(html: string, source: string): ResolvedMedia {
   return { result, transfers };
 }
 
-export async function resolveSpotify(url: string): Promise<ResolvedMedia> {
+export async function resolveSpotify(url: string, signal?: AbortSignal): Promise<ResolvedMedia> {
   const post = spotifyPost(url);
   const headers = { "User-Agent": "Mozilla/5.0" };
-  const html = await fetchMediaPage(`https://open.spotify.com/embed/${post.kind}/${post.id}`, headers, url);
+  const html = await fetchMediaPage(`https://open.spotify.com/embed/${post.kind}/${post.id}`, headers, url, signal);
   const resolved = parseSpotifyPage(html, url);
   if (!resolved.result.description) {
     try {
-      const page = await fetchMediaPage(post.canonical, headers, url);
+      const page = await fetchMediaPage(post.canonical, headers, url, signal);
       resolved.result.description =
         parseHTML(page).document.querySelector('meta[name="description"]')?.getAttribute("content") ?? "";
     } catch (error) {
+      signal?.throwIfAborted();
       // Optional description failure must not discard a verified public audio source.
       if (!(error instanceof OutformError) || error.code === "RATE_LIMITED") throw error;
       resolved.result.issues.push({ ...error.issue, message: `Spotify description unavailable: ${error.message}` });

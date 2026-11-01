@@ -66,6 +66,8 @@ jobs:
           node dist/bin.js install --dry-run --json > setup-plan.json
           node -e 'const r = JSON.parse(require("fs").readFileSync("setup-plan.json", "utf8")); if (!r.plans.every(p => p.installed)) process.exit(1)'
           bun scripts/smoke-whisper.ts
+          bun scripts/smoke-audio.ts
+          if [ "$RUNNER_OS" != "Windows" ]; then bun test tests/extractors/audio-flow.test.ts; fi
           node dist/bin.js feedback --help
       - name: Build and launch signed macOS executable
         if: runner.os == 'macOS'

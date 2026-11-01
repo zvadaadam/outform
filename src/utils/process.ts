@@ -192,6 +192,45 @@ export interface ProcResult {
   exitCode: number;
 }
 
+const processGroups = new Set<number>();
+const terminationSignals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+
+function killProcessGroup(pid: number, signal: NodeJS.Signals) {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    // The process group may already have exited.
+  }
+}
+
+function killProcessGroups() {
+  for (const pid of processGroups) killProcessGroup(pid, "SIGKILL");
+}
+
+function defaultTermination(signal: NodeJS.Signals) {
+  // CLI/API handlers own graceful cancellation. Preserve default termination otherwise.
+  if (process.listeners(signal).some((listener) => listener !== defaultTermination)) return;
+  killProcessGroups();
+  process.removeListener(signal, defaultTermination);
+  process.kill(process.pid, signal);
+}
+
+function trackProcessGroup(pid: number) {
+  if (!processGroups.size) {
+    process.on("exit", killProcessGroups);
+    // Run before once-handlers remove themselves, so they remain visible above.
+    for (const signal of terminationSignals) process.prependListener(signal, defaultTermination);
+  }
+  processGroups.add(pid);
+  return () => {
+    processGroups.delete(pid);
+    if (!processGroups.size) {
+      process.removeListener("exit", killProcessGroups);
+      for (const signal of terminationSignals) process.removeListener(signal, defaultTermination);
+    }
+  };
+}
+
 export function spawn(
   cmd: string[],
   opts?: {
@@ -200,9 +239,12 @@ export function spawn(
     stdin?: string;
     cwd?: string;
     env?: NodeJS.ProcessEnv;
+    signal?: AbortSignal;
   },
 ): Proc {
+  opts?.signal?.throwIfAborted();
   const executable = managedToolTarget(cmd[0]!) ? toolPath(cmd[0]!, opts?.env) : cmd[0]!;
+  const detached = !!opts?.signal && process.platform !== "win32";
   const child = nodeSpawn(executable, cmd.slice(1), {
     stdio: [
       opts?.stdin !== undefined ? "pipe" : "ignore",
@@ -210,7 +252,48 @@ export function spawn(
       opts?.stderr ?? "pipe",
     ],
     cwd: opts?.cwd,
+    detached,
     env: toolEnvironment(opts?.env),
+  });
+
+  const untrack = detached && child.pid ? trackProcessGroup(child.pid) : undefined;
+  let closed = false;
+  let cleanup: Promise<void> | undefined;
+  const stop = () => {
+    if (!child.pid || closed || cleanup) return;
+    if (!opts?.signal) {
+      child.kill();
+      return;
+    }
+    if (process.platform === "win32") {
+      cleanup = new Promise((resolve) => {
+        const killer = nodeSpawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+        killer.on("error", () => {
+          child.kill();
+          resolve();
+        });
+        killer.on("close", (code) => {
+          if (code !== 0) child.kill();
+          resolve();
+        });
+      });
+    } else {
+      const pid = child.pid;
+      killProcessGroup(pid, "SIGTERM");
+      cleanup = new Promise((resolve) => {
+        // Descendants can outlive the direct child and close all inherited pipes.
+        setTimeout(() => {
+          killProcessGroup(pid, "SIGKILL");
+          resolve();
+        }, 1000);
+      });
+    }
+  };
+  opts?.signal?.addEventListener("abort", stop, { once: true });
+  if (opts?.signal?.aborted) stop();
+  child.once("close", () => {
+    closed = true;
+    opts?.signal?.removeEventListener("abort", stop);
   });
 
   let stdinFailed = false;
@@ -229,8 +312,12 @@ export function spawn(
     exited: new Promise<number>((resolve) => {
       child.on("close", (code) => resolve(code === 0 && stdinFailed ? 1 : (code ?? 1)));
       child.on("error", () => resolve(1));
+    }).then(async (code) => {
+      await cleanup;
+      untrack?.();
+      return code;
     }),
-    kill: () => child.kill(),
+    kill: stop,
   };
 }
 

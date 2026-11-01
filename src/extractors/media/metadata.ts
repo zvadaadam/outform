@@ -12,9 +12,37 @@ export interface MediaAsset {
   height: number | null;
   duration: number | null;
   file: string | null;
+  artifact?: MediaFileInfo;
+  sourceMedia?: {
+    kind: "video" | "audio";
+    url: string | null;
+    width: number | null;
+    height: number | null;
+    duration: number | null;
+  };
+}
+export interface MediaFileInfo {
+  bytes: number;
+  sha256: string;
+  contentType: string;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  hasAudio: boolean | null;
+  verification: "transport" | "signature" | "probe" | "decode";
+  inputSha256?: string;
+}
+export interface MediaSaveOptions {
+  output?: "media" | "audio";
+  signal?: AbortSignal;
+  maxBytes?: number;
+  maxDuration?: number;
+  maxItems?: number;
+  timeoutMs?: number;
+  verification?: "probe" | "decode";
 }
 export interface MediaResult {
-  platform: MediaPlatform;
+  platform: MediaPlatform | "local";
   id: string;
   title: string;
   description: string;
@@ -53,7 +81,10 @@ export interface MediaCandidate {
   width?: number | null;
   height?: number | null;
 }
-export type MediaTransfer = { type: "http"; candidates: MediaCandidate[] } | { type: "yt-dlp"; info: Info };
+export type MediaTransfer =
+  | { type: "http"; candidates: MediaCandidate[] }
+  | { type: "yt-dlp"; info: Info }
+  | { type: "file"; path: string };
 export interface ResolvedMedia {
   result: MediaResult;
   transfers: Map<number, MediaTransfer>;

@@ -38,3 +38,5 @@ export { installTargets, EXTRACTION_TARGETS, type SetupReport, type SetupResult 
 export type { Chapter, TranscriptSegment } from "./utils/vtt";
 export type { MediaAsset, MediaResult } from "./extractors/media";
 export type { MediaPlatform } from "./utils/url";
+
+export type { MediaFileInfo } from "./extractors/media/metadata";

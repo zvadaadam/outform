@@ -44,6 +44,7 @@ YouTube videos include title, description, channel, thumbnail URL, upload date, 
 ## Options
 
 ```text
+--audio                  Download MP3 audio only (download command)
 --json                   Output structured JSON
 --text                   Output plain text
 --chapters               Generate missing YouTube chapters with short descriptions
@@ -111,9 +112,54 @@ Spotify episode and track URLs return available title, description, publisher/ar
 outform download 'https://open.spotify.com/episode/45m6z2GQIIvert8LxSXcjt' --output ./podcasts
 ```
 
-Spotify needs no installed media tools or account. Episodes without a public original retain their metadata with an actionable issue; downloads fail without creating an empty folder. Music downloads, protected streams, previews, shows, and playlists are not supported as downloads. Preview audio is never substituted for a full episode. Podcast audio streams to disk without a duration or file-size cutoff; requests time out after 15 minutes. Spotify output does not include transcripts or generated chapters.
+Spotify needs no installed media tools or account. Episodes without a public original retain their metadata with an actionable issue; downloads fail without creating an empty folder. Music downloads, protected streams, previews, shows, and playlists are not supported as downloads. Preview audio is never substituted for a full episode. Podcast audio streams to disk without a duration or file-size cutoff; the complete operation times out after 15 minutes by default. Spotify output does not include transcripts or generated chapters.
 
 For other social downloads, `outform install youtube ffmpeg` prepares the shared downloader and media tools without the Whisper model. The `youtube` target also installs Deno for YouTube. YouTube URLs work with `download` too; ordinary YouTube extraction continues to return transcripts.
+
+## MP3 audio
+
+Video and image downloads remain the default. Request just the audio explicitly:
+
+```bash
+outform install youtube ffmpeg
+outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --audio --output ./audio --json
+```
+
+For a video or audio file already on your computer, conversion needs only FFmpeg:
+
+```bash
+outform install ffmpeg
+outform audio ./video.mp4 --output ./audio --json
+```
+
+Both paths produce MP3, fully decode it, and compute its SHA-256 before exposing the saved file. Existing MP3 bytes are preserved; other formats are encoded at 192 kbps. The original local file is preserved. Audio-only source streams are preferred when available; otherwise audio is extracted from a combined stream. Increasing the bitrate does not improve source quality. No Whisper, AI provider, account connection, or cloud upload is involved.
+
+Photo items are excluded in audio mode; photo-only posts fail clearly. Silent or corrupt videos report an issue, while successful items remain available. Original item indexes are preserved. Converted items have `kind: "audio"` and `url: null`; `sourceMedia` retains the original item's media metadata. `artifact.inputSha256` identifies the actual acquired input used for conversion. Conversion results use `platform: "local"` for an existing file.
+
+Saved items include `artifact` with `bytes`, `sha256`, `contentType`, `width`, `height`, `duration`, `hasAudio`, and `verification`. The verification value states what was checked: `decode` for converted MP3s, `probe` for other audio/video when managed FFprobe is installed, `signature` for recognized image headers, or `transport` for tool-free original podcast downloads. Unknown properties remain null (unknown MIME is `application/octet-stream`). A checksum or probe alone does not establish that the entire file decodes. Images receive header checks, not full decoding.
+
+Ctrl-C cancels download/conversion, stops native child processes and removes staging files. Completed files and their manifest remain; the CLI exits 130 (143 for SIGTERM). The JS API accepts `signal`, `timeoutMs` (default 15 minutes for the complete operation), `maxBytes` (per acquired input/output), `maxDuration` (seconds per item), `maxItems`, and `verification: "decode"` for full audio/video decoding. MP3 encoder padding may add up to 0.25 seconds to a duration bound. There is no default duration or byte cap for audio/video; existing image/item limits still apply. Limits stop remaining work with `LIMIT_EXCEEDED`; cancellation and timeouts use `DOWNLOAD_CANCELLED` and `DOWNLOAD_TIMEOUT`. Verification failures use `VERIFICATION_FAILED`. Before an output folder exists, failures throw `OutformError`; afterward they appear in `issues` with any completed files.
+
+```ts
+import { download, convertAudio } from "outform";
+
+const controller = new AbortController();
+const result = await download(videoUrl, {
+  output: "audio",
+  directory: "./audio",
+  signal: controller.signal,
+  maxBytes: 500_000_000,
+  maxDuration: 3 * 60 * 60,
+});
+
+// Reuse a saved or cached file without contacting its source again.
+const converted = await convertAudio("./saved/video.mp4", {
+  directory: "./audio",
+  signal: controller.signal,
+});
+```
+
+A hosted service can run `convertAudio` in its processing container against its own retained file. Local Outform commands do not send files to that service; storage and job reuse belong to the service calling the API.
 
 ## Optional chapters
 

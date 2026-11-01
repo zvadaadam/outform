@@ -3,17 +3,23 @@ import { join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { publicFetch } from "../../utils/public-fetch";
+import type { MediaSaveOptions } from "./metadata";
 import { mediaError, mediaSourceFailure } from "../../errors";
 
 export async function fetchMediaPage(
   input: string | URL,
   headers: Record<string, string>,
   source: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   let response: Response;
   try {
-    response = await publicFetch(input, { headers, signal: AbortSignal.timeout(30_000) });
+    response = await publicFetch(input, {
+      headers,
+      signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]),
+    });
   } catch {
+    signal?.throwIfAborted();
     throw mediaError(
       "Could not reach the media page. Check your connection and retry later; only public media servers are allowed.",
       source,
@@ -26,6 +32,7 @@ export async function fetchMediaPage(
   try {
     return await response.text();
   } catch {
+    signal?.throwIfAborted();
     throw mediaError("The media page could not be read completely. Retry the original post URL later.", source);
   }
 }
@@ -35,10 +42,14 @@ export async function downloadHttpMedia(
   kind: "image" | "audio",
   directory: string,
   referer: string,
+  options: MediaSaveOptions = {},
 ): Promise<string> {
   const response = await publicFetch(url, {
     headers: { "User-Agent": "Mozilla/5.0", Referer: referer },
-    signal: AbortSignal.timeout(kind === "image" ? 60_000 : 15 * 60_000),
+    signal: AbortSignal.any([
+      AbortSignal.timeout(kind === "image" ? 60_000 : (options.timeoutMs ?? 15 * 60_000)),
+      ...(options.signal ? [options.signal] : []),
+    ]),
   });
   const mime = response.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
   const extensions: Record<string, string> =
@@ -69,17 +80,21 @@ export async function downloadHttpMedia(
   }
   const file = join(directory, `media.${extension}`);
   let received = 0;
-  const maxBytes = kind === "image" ? 50 * 1024 * 1024 : Infinity;
+  const maxBytes = Math.min(kind === "image" ? 50 * 1024 * 1024 : Infinity, options.maxBytes ?? Infinity);
   const limit = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
       received += chunk.length;
-      callback(received > maxBytes ? new Error(`${kind} exceeds ${maxBytes / 1024 / 1024} MB.`) : null, chunk);
+      callback(
+        received > maxBytes ? mediaError(`Media exceeds the ${maxBytes}-byte limit.`, referer, "LIMIT_EXCEEDED") : null,
+        chunk,
+      );
     },
   });
   await pipeline(
     Readable.fromWeb(response.body as import("node:stream/web").ReadableStream),
     limit,
     createWriteStream(file, { flags: "wx" }),
+    { signal: options.signal },
   );
   if (!received) throw new Error("The media response was empty.");
   const length = Number(response.headers.get("content-length"));
