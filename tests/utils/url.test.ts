@@ -97,3 +97,30 @@ describe("isValidUrl", () => {
     expect(isValidUrl("")).toBe(false);
   });
 });
+
+describe("social post routing", () => {
+  test.each([
+    "https://www.instagram.com/reel/DfAZMAjseOQ/?tracking=1",
+    "https://www.instagram.com/creator/p/abc/",
+    "https://x.com/creator/status/123",
+    "https://twitter.com/i/web/status/123",
+    "https://www.tiktok.com/@creator/photo/123",
+    "https://vm.tiktok.com/abc/",
+    "https://jp.pinterest.com/pin/123/",
+    "https://www.pinterest.co.uk/pin/title--123/",
+    "https://pin.it/abc",
+    "https://www.facebook.com/video.php?v=123",
+    "https://www.facebook.com/creator/videos/123/",
+    "https://old.reddit.com/r/test/comments/abc/title/",
+    "https://vimeo.com/123",
+  ])("routes %s to media", (url) => expect(detectUrlType(url)).toBe("media"));
+
+  test.each([
+    "https://www.instagram.com/creator/",
+    "https://x.com/creator",
+    "https://pinterest.com/creator/board/",
+    "https://instagram.com.example.org/p/abc/",
+    "https://fakepinterest.com/pin/123/",
+    "https://example.com/?url=https://instagram.com/p/abc/",
+  ])("does not treat %s as a supported post", (url) => expect(detectUrlType(url)).toBe("web"));
+});

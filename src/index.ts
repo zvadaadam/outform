@@ -36,3 +36,5 @@ export { submitFeedback, type FeedbackOptions } from "./feedback";
 export { installTargets, EXTRACTION_TARGETS, type SetupReport, type SetupResult } from "./setup";
 
 export type { Chapter, TranscriptSegment } from "./utils/vtt";
+export type { MediaAsset, MediaResult } from "./extractors/media";
+export type { MediaPlatform } from "./utils/url";

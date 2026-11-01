@@ -10,14 +10,21 @@ export type OutformErrorCode =
   | "FEEDBACK_FAILED"
   | "EXTRACTION_FAILED"
   | "TRANSCRIPT_UNAVAILABLE"
-  | "CHAPTER_GENERATION_FAILED";
+  | "CHAPTER_GENERATION_FAILED"
+  | "MEDIA_UNAVAILABLE"
+  | "LOGIN_REQUIRED"
+  | "MEDIA_RESTRICTED"
+  | "MEDIA_NOT_FOUND"
+  | "MEDIA_PROTECTED"
+  | "RATE_LIMITED"
+  | "DOWNLOAD_FAILED";
 
 export interface OutformIssue {
   code: OutformErrorCode;
   message: string;
   url?: string;
   urlType?: UrlType | null;
-  capability?: "input" | "web" | "pdf" | "youtube" | "aiChapters" | "transcription" | "setup" | "feedback";
+  capability?: "input" | "web" | "pdf" | "youtube" | "media" | "aiChapters" | "transcription" | "setup" | "feedback";
   dependency?: string;
   provider?: string;
   setupTarget?: string;
@@ -72,7 +79,7 @@ export function missingDependencyIssue(input: {
   message?: string;
   url?: string;
   urlType?: UrlType | null;
-  capability: "youtube" | "aiChapters" | "setup";
+  capability: "youtube" | "media" | "aiChapters" | "setup";
   dependency: string;
   setupTarget: string;
   installHints: string[];

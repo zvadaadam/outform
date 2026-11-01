@@ -2,7 +2,7 @@
 
 `outform` is curl for AI-ready content.
 
-Give it a URL or local file path and it returns clean Markdown, text, or JSON for humans, scripts, and coding agents. It detects web pages, PDFs, text, Markdown, and YouTube videos automatically.
+Give it a URL or local file path and it returns clean Markdown, text, or JSON for humans, scripts, and coding agents. It detects web pages, PDFs, text, Markdown, YouTube videos, and supported social posts automatically.
 
 ## Installation
 
@@ -39,7 +39,7 @@ outform --json ./notes.md
 outform --text ./notes.md
 ```
 
-Videos include title, description, channel, thumbnail URL, upload date, and a timestamped transcript. Source chapters are included when available. [Optional AI chapters](#optional-chapters) can fill in missing topic navigation.
+YouTube videos include title, description, channel, thumbnail URL, upload date, and a timestamped transcript. Source chapters are included when available. [Optional AI chapters](#optional-chapters) can fill in missing topic navigation.
 
 ## Options
 
@@ -47,7 +47,7 @@ Videos include title, description, channel, thumbnail URL, upload date, and a ti
 --json                   Output structured JSON
 --text                   Output plain text
 --chapters               Generate missing YouTube chapters with short descriptions
---output <path>          Write result to a file instead of stdout
+--output <path>          Result file; with download, parent directory for media
 --lang <code>            Caption language for YouTube (default: en)
 --provider <name>        Chapter provider for --chapters (claude|codex|none)
 --format <md|txt|json>   Advanced format override
@@ -80,7 +80,32 @@ outform --json 'https://example.com/article' | jq .
 printf '%s\n' 'https://example.com?a=1&b=2' | outform
 ```
 
-The default speech model is English-only; `--lang` selects captions, not a different transcription model. Pinterest, Instagram, and ad-library extraction are not supported yet.
+The default speech model is English-only; `--lang` selects captions, not a different transcription model. Ad-library extraction is not supported.
+
+## Social posts and downloads
+
+Read a public post's caption, author, title, date, thumbnails, and ordered media links:
+
+```bash
+outform --json 'https://www.instagram.com/reel/DfAZMAjseOQ/'
+```
+
+Save the media files and a `metadata.json` manifest:
+
+```bash
+outform download 'https://www.instagram.com/reel/DfAZMAjseOQ/'
+outform download 'https://www.instagram.com/p/BoHk1haB5tM/' --output ./media --json
+```
+
+Each download creates a unique post folder under `./outform-downloads` (or `--output <directory>`), with numbered files in source order. Existing downloads are preserved. Videos retain their available audio; photo posts save the largest accessible source images. TikTok photo posts include the slides and a separate soundtrack when available. Containers and image formats follow the source; videos may be MP4, MKV, or WebM. A post may contain up to 50 media items; images are limited to 50 MB each.
+
+Public Instagram Reels, image posts and carousels, X/Twitter videos, TikTok videos and photo posts, Pinterest videos/images/story pages, and Facebook and Vimeo videos are supported. Reddit video URLs are recognized, but anonymous access can be blocked by Reddit. Private, removed, restricted, or rate-limited posts may fail on any platform. Outform does not connect accounts, read browser cookies, or use your yt-dlp configuration.
+
+Social output contains publisher text and media metadata, without OCR, speech transcription, or AI chapters. Regular extraction returns links without saving media; CDN links can expire. Use `download` to keep files. Missing items and failed downloads appear in `issues`; successful files remain available. Downloads exit nonzero when any item fails, including partial results in JSON. `inspect()` checks local extraction tools, not whether the remote post is accessible.
+
+Failure messages distinguish explicit private/age/location restrictions (`MEDIA_RESTRICTED`), missing or removed media (`MEDIA_NOT_FOUND`), login requirements (`LOGIN_REQUIRED`), rate limits (`RATE_LIMITED`), and protected streams (`MEDIA_PROTECTED`). A generic access denial does not prove a post is private. Unknown failures say that the cause is unknown and suggest retrying or reporting the URL. A rate limit stops further downloads. Partial downloads print the saved-file count and folder on stderr; the manifest keeps each available file and its issues.
+
+For social downloads alone, `outform install youtube ffmpeg` prepares the shared downloader and media tools without the Whisper model. The `youtube` target also installs Deno for YouTube. YouTube URLs work with `download` too; ordinary YouTube extraction continues to return transcripts.
 
 ## Optional chapters
 
@@ -252,6 +277,15 @@ const installPlan = await getInstallPlan("youtube");
 - extraction and optional chapter-generation capability info
 
 YouTube JSON includes `videoId`, `title`, `author`, `channel`, `channelId`, `channelUrl`, `thumbnail`, `uploadDate`, `source`, `duration`, `description`, `chapters`, `chaptersSource` (`source`, `generated`, or `null`), `transcript`, `transcriptSegments` (`startTime`, `endTime`, `text`), `transcriptSource` (`captions`, `whisper`, or `null`), and `issues`. All times are seconds. `author` identifies the publishing channel (falling back to uploader), not an inferred speaker or copyright owner. `uploadDate` is a UTC calendar date (`YYYY-MM-DD`); unavailable optional metadata is `null`. `thumbnail` is the source image URL, not a downloaded image. Thumbnail, channel link, and upload date are also included in Markdown/text. Source descriptions retain their paragraph breaks. Use `extract(videoUrl, { chapters: true })` to request missing chapters. Provider failure leaves extraction usable; inspect `issues` for partial results. `inspect().ready` describes extraction readiness, while `capabilities.aiChapters` describes optional generation readiness.
+
+Social JSON uses `type: "media"` with `platform`, `id`, `title`, `description`, `author`, `source`, `uploadDate`, `media`, `directory`, and `issues`. Each media item has `id`, `index` (1-based source order), `kind` (`image`, `video`, or `audio`), `url`, `thumbnail`, `width`, `height`, `duration` in seconds, and `file`. Unavailable values are `null`; a video URL may be null when separate streams require merging. Downloaded files have absolute paths.
+
+```ts
+import { download } from "outform";
+const saved = await download("https://www.instagram.com/reel/DfAZMAjseOQ/", { directory: "./media" });
+console.log(saved.json.media.map((item) => item.file));
+// Inspect saved.issues for partial downloads; fatal failures throw OutformError.
+```
 
 Migration: `--summarize`, the API `summarize` option, and the generated `summary` field have been removed. Use `--chapters` / `chapters: true` for videos; web and PDF output contains source content only.
 
