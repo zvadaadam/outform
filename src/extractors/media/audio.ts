@@ -66,7 +66,7 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
       "error",
       ...LOCAL_INPUT,
       "-show_entries",
-      "format=format_name,duration:stream=codec_type,codec_name,width,height,duration,start_time:stream_disposition=attached_pic:stream_tags=DURATION",
+      "format=format_name,duration:format_tags=encoder:stream=codec_type,codec_name,width,height,duration,start_time:stream_disposition=attached_pic:stream_tags=DURATION,_STATISTICS_TAGS",
       "-of",
       "json",
       file,
@@ -87,11 +87,15 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
   const audio = streams.find((s) => s.codec_type === "audio");
   const format = record(data) && record(data.format) ? data.format : {};
   const duration = Number(format.duration ?? audio?.duration);
-  const tag = record(audio?.tags) ? text(audio.tags.DURATION) : "";
+  const tags = record(audio?.tags) ? audio.tags : {};
+  const tag = text(tags.DURATION);
   const tagged = /^(\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)$/.exec(tag);
   const streamDuration = Number(audio?.duration);
-  const start = Number(audio?.start_time ?? 0);
-  // Matroska's DURATION tag is the track's end timestamp, including any start offset.
+  const encoder = record(format.tags) ? text(format.tags.ENCODER ?? format.tags.encoder) : "";
+  const isTrackStatistics =
+    !encoder.startsWith("Lavf") && text(tags._STATISTICS_TAGS).split(/\s+/).includes("DURATION");
+  // FFmpeg rewrites DURATION as an end timestamp even when copying statistics tags.
+  const start = isTrackStatistics ? 0 : Number(audio?.start_time ?? 0);
   const taggedDuration = tagged
     ? +tagged[1]! * 3600 + +tagged[2]! * 60 + +tagged[3]! - (Number.isFinite(start) ? start : 0)
     : NaN;

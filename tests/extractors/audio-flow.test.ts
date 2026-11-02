@@ -180,6 +180,54 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
     20_000,
   );
 
+  test.each([
+    ["mkvmerge net duration", true],
+    ["FFmpeg copied statistics", false],
+  ] as const)(
+    "preserves delayed audio with %s",
+    async (_label, netDuration) => {
+      const f = await fixture();
+      const video = join(f.root, "track-statistics.mkv");
+      await ffmpeg([
+        "-f",
+        "lavfi",
+        "-i",
+        "color=size=64x64:rate=10:duration=4",
+        "-itsoffset",
+        "1",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=duration=2",
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "pcm_s16le",
+        "-metadata:s:a:0",
+        "_STATISTICS_TAGS=BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES",
+        video,
+      ]);
+      if (netDuration) {
+        // Represent mkvmerge's writer and net duration without changing media or EBML sizes.
+        const bytes = await readFile(video);
+        const offset = bytes.indexOf("00:00:03.000000000");
+        expect(offset).toBeGreaterThan(-1);
+        bytes.write("00:00:02.000000000", offset);
+        const writers = [...bytes.toString("latin1").matchAll(/Lavf[\d.]+/g)];
+        expect(writers.length).toBeGreaterThan(0);
+        for (const writer of writers) bytes.write("mkvmerge".padEnd(writer[0].length), writer.index);
+        await writeFile(video, bytes);
+      }
+      const result = await f.run(["src/bin.ts", "audio", video, "--output", f.output, "--json"]);
+      expect(result.exit).toBe(0);
+      expect(result.data.issues).toEqual([]);
+      expect(result.data.media[0].sourceMedia.duration).toBe(4);
+      expect(result.data.media[0].artifact.duration).toBeCloseTo(2, 0);
+      expect(result.data.media[0].artifact.verification).toBe("decode");
+    },
+    20_000,
+  );
+
   test("verified container types distinguish Matroska and WebM independently of the filename", async () => {
     const f = await fixture();
     const input = await generated(f.root);
