@@ -38,6 +38,19 @@ async function createFakeToolPath(commands: string[]): Promise<{ dir: string; pa
 }
 
 describe("CLI flags", () => {
+  test("download and audio help explain exports without unrelated extraction options", async () => {
+    const download = await collect(run(["download", "--help"]));
+    expect(download.exitCode).toBe(0);
+    expect(download.stdout).toContain("--format mp4");
+    expect(download.stdout).toContain("--format mp3");
+    expect(download.stdout).toContain("--format original");
+    expect(download.stdout).toContain("download report as JSON");
+    expect(download.stdout).not.toContain("--chapters");
+    const audio = await collect(run(["audio", "--help"]));
+    expect(audio.stdout).toContain("without fetching its source again");
+    expect(audio.stdout).not.toContain("--chapters");
+  });
+
   test("install accepts multiple targets and includes each companion once", async () => {
     const result = await collect(run(["install", "youtube", "ffmpeg", "youtube", "--dry-run", "--json"], NO_TOOLS_ENV));
     expect(result.exitCode).toBe(0);
@@ -123,6 +136,16 @@ describe("CLI flags", () => {
 });
 
 describe("CLI error handling", () => {
+  test.each([
+    ["--format", "webm", "--json"],
+    ["--format", "mp4", "--audio", "--json"],
+    ["--format", "original", "--audio", "--json"],
+  ])("rejects invalid or conflicting export choices before requesting tools: %j", async (...args) => {
+    const result = await collect(run(["download", "https://youtu.be/abc123def45", ...args], NO_TOOLS_ENV));
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout).issues[0].code).toBe("INVALID_OPTIONS");
+  });
+
   test("no source prints error to stderr and exits 1", async () => {
     const { stderr, stdout, exitCode } = await collect(run([]));
     expect(exitCode).toBe(1);

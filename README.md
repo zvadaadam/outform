@@ -10,7 +10,7 @@ Give it a URL or local file path and it returns clean Markdown, text, or JSON fo
 npm install -g outform && outform install
 ```
 
-Setup prepares video extraction and downloads an English speech model (148 MB). For web pages, PDFs, local text files, and supported Spotify podcasts, you can skip `outform install`.
+Setup prepares video extraction and downloads an English speech model (148 MB). Web pages, PDFs, local text files, Spotify metadata, and Spotify downloads with `--format original` need no setup.
 
 Requires Node 20 (20.16+) or Node 22.3+. macOS video setup also needs [Homebrew](https://brew.sh). Linux setup may ask you to install system runtimes. See [platform requirements](#advanced-setup) or use a [standalone binary](#standalone-binary) without Node.
 
@@ -44,14 +44,14 @@ YouTube videos include title, description, channel, thumbnail URL, upload date, 
 ## Options
 
 ```text
---audio                  Download MP3 audio only (download command)
+--audio                  Shortcut for download --format mp3
 --json                   Output structured JSON
 --text                   Output plain text
 --chapters               Generate missing YouTube chapters with short descriptions
 --output <path>          Result file; with download, parent directory for media
 --lang <code>            Caption language for YouTube (default: en)
 --provider <name>        Chapter provider for --chapters (claude|codex|none)
---format <md|txt|json>   Advanced format override
+--format <format>        Extraction: md|txt|json; download: mp4|mp3|original
 --check                  Alias for human-readable doctor output
 --version                Show version
 --help                   Show help
@@ -91,14 +91,14 @@ Read a public post's caption, author, title, date, thumbnails, and ordered media
 outform --json 'https://www.instagram.com/reel/DfAZMAjseOQ/'
 ```
 
-Save the media files and a `metadata.json` manifest. Use `--json` or `--text` to select output format:
+Save the media files and a `metadata.json` manifest. Use `--format` for the media export and `--json` or `--text` for the report:
 
 ```bash
 outform download 'https://www.instagram.com/reel/DfAZMAjseOQ/'
 outform download 'https://www.instagram.com/p/BoHk1haB5tM/' --output ./media --json
 ```
 
-Each download creates a unique post folder under `./outform-downloads` (or `--output <directory>`), with numbered files in source order. Existing downloads are preserved. Videos retain their available audio; photo posts save the largest accessible source images. TikTok photo posts include the slides and a separate soundtrack when available. Containers and image formats follow the source; videos may be MP4, MKV, or WebM. A post may contain up to 50 media items; images are limited to 50 MB each.
+Each download creates a unique post folder under `./outform-downloads` (or `--output <directory>`), with numbered files in source order. Existing downloads are preserved. Videos retain their available audio; photo posts save the largest accessible source images. TikTok photo posts include the slides and a separate soundtrack when available. Videos default to MP4 (H.264 video and AAC audio); standalone audio defaults to MP3. Images keep their source format. Use `--format original` to preserve source containers such as MKV or WebM. A post may contain up to 50 media items; images are limited to 50 MB each.
 
 Public Instagram Reels, image posts and carousels, X/Twitter videos, TikTok videos and photo posts, Pinterest videos/images/story pages, and Facebook and Vimeo videos are supported. Reddit posts retain ordinary web extraction so text discussions remain readable; use `outform download <reddit-post-url>` explicitly for media. Reddit can block anonymous access. Private, removed, restricted, or rate-limited posts may fail on any platform. Outform does not connect accounts, read browser cookies, or use your yt-dlp configuration.
 
@@ -109,20 +109,30 @@ Failure messages distinguish explicit private/age/location restrictions (`MEDIA_
 Spotify episode and track URLs return available title, description, publisher/artist, date, and cover image. Public podcast episodes can also download their original audio when Spotify exposes a public publisher URL:
 
 ```bash
-outform download 'https://open.spotify.com/episode/45m6z2GQIIvert8LxSXcjt' --output ./podcasts
+outform download 'https://open.spotify.com/episode/45m6z2GQIIvert8LxSXcjt' --format original --output ./podcasts
 ```
 
-Spotify needs no installed media tools or account. Episodes without a public original retain their metadata with an actionable issue; downloads fail without creating an empty folder. Music downloads, protected streams, previews, shows, and playlists are not supported as downloads. Preview audio is never substituted for a full episode. Podcast audio streams to disk without a duration or file-size cutoff; the complete operation times out after 15 minutes by default. Spotify output does not include transcripts or generated chapters.
+Spotify metadata and `--format original` downloads need no installed media tools or account. The default MP3 export requires `outform install ffmpeg`. Episodes without a public original retain their metadata with an actionable issue; downloads fail without creating an empty folder. Music downloads, protected streams, previews, shows, and playlists are not supported as downloads. Preview audio is never substituted for a full episode. Podcast audio streams to disk without a duration or file-size cutoff; the complete operation times out after 15 minutes by default. Spotify output does not include transcripts or generated chapters.
 
 For other social downloads, `outform install youtube ffmpeg` prepares the shared downloader and media tools without the Whisper model. The `youtube` target also installs Deno for YouTube. YouTube URLs work with `download` too; ordinary YouTube extraction continues to return transcripts.
 
-## MP3 audio
+## Export formats
 
-Video and image downloads remain the default. Request just the audio explicitly:
+| Choice                     | Saved files                            |
+| -------------------------- | -------------------------------------- |
+| Default / `--format mp4`   | MP4 videos, MP3 audio, original images |
+| `--format mp3` / `--audio` | MP3 audio only; photos omitted         |
+| `--format original`        | Source formats; no re-encoding         |
+
+Outform prefers H.264/AAC streams at the best available resolution. Compatible MP4 files are kept byte-for-byte; compatible streams in another container are repackaged without encoding. Other video tracks are encoded as H.264/yuv420p, and incompatible audio tracks as AAC. HDR video is tone-mapped to SDR for playback compatibility; original mode preserves HDR. Silent videos remain silent. Encoding takes extra time and may slightly change quality; it does not improve the source. `--format original` preserves source formats and avoids encoding. MP4/MP3 exports require FFmpeg and FFprobe; image-only posts do not.
+
+`--json` and `--text` change only the report. Existing `--format md|txt|json` report options still work with downloads and use the default media export. Use `outform download --help` for focused usage.
+
+Request just the audio explicitly:
 
 ```bash
 outform install youtube ffmpeg
-outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --audio --output ./audio --json
+outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --format mp3 --output ./audio --json
 ```
 
 For a video or audio file already on your computer, conversion needs only FFmpeg:
@@ -132,20 +142,20 @@ outform install ffmpeg
 outform audio ./video.mp4 --output ./audio --json
 ```
 
-Both paths produce MP3, fully decode it, and compute its SHA-256 before exposing the saved file. Existing MP3 bytes are preserved; other formats are encoded at 192 kbps. The original local file is preserved. Audio-only source streams are preferred when available; otherwise audio is extracted from a combined stream. Increasing the bitrate does not improve source quality. No Whisper, AI provider, account connection, or cloud upload is involved.
+Both audio paths produce MP3, fully decode it, and compute its SHA-256 before exposing the saved file. Existing MP3 bytes are preserved; other formats are encoded at 192 kbps. The original local file is preserved. Audio-only source streams are preferred when available; otherwise audio is extracted from a combined stream. Increasing the bitrate does not improve source quality. No Whisper, AI provider, account connection, or cloud upload is involved.
 
-Photo items are excluded in audio mode; photo-only posts fail clearly. Silent or corrupt videos report an issue, while successful items remain available. Original item indexes are preserved. Converted items have `kind: "audio"` and `url: null`; `sourceMedia` retains the original item's media metadata. `artifact.inputSha256` identifies the actual acquired input used for conversion. Conversion results use `platform: "local"` for an existing file.
+Photo items are excluded in audio mode; photo-only posts fail clearly. Silent or corrupt videos report an issue, while successful items remain available. Original item indexes are preserved. MP3 exports have `kind: "audio"`. Repackaged or converted items have `url: null`; `sourceMedia` retains the original item's media metadata. Saved video dimensions and duration describe the exported file. `artifact.inputSha256` identifies the actual acquired input used for conversion. Conversion results use `platform: "local"` for an existing file.
 
-Saved items include `artifact` with `bytes`, `sha256`, `contentType`, `width`, `height`, `duration`, `hasAudio`, and `verification`. The verification value states what was checked: `decode` for converted MP3s, `probe` for other audio/video when managed FFprobe is installed, `signature` for recognized image headers, or `transport` for tool-free original podcast downloads. Unknown properties remain null (unknown MIME is `application/octet-stream`). A checksum or probe alone does not establish that the entire file decodes. Images receive header checks, not full decoding.
+Saved items include `artifact` with `bytes`, `sha256`, `contentType`, `width`, `height`, `duration`, `hasAudio`, and `verification`. The verification value states what was checked: `decode` for converted MP3s, `probe` for MP4 exports and other audio/video when managed FFprobe is installed, `signature` for recognized image headers, or `transport` for tool-free original podcast downloads. Unknown properties remain null (unknown MIME is `application/octet-stream`). A checksum or probe alone does not establish that the entire file decodes. Images receive header checks, not full decoding.
 
-Ctrl-C cancels download/conversion, stops native child processes and removes staging files. Completed files and their manifest remain; the CLI exits 130 (143 for SIGTERM). The JS API accepts `signal`, `timeoutMs` (default 15 minutes for the complete operation), `maxBytes` (per acquired input/output), `maxDuration` (seconds per item), `maxItems`, and `verification: "decode"` for full audio/video decoding. MP3 encoder padding may add up to 0.25 seconds to a duration bound. There is no default duration or byte cap for audio/video; existing image/item limits still apply. Limits stop remaining work with `LIMIT_EXCEEDED`; cancellation and timeouts use `DOWNLOAD_CANCELLED` and `DOWNLOAD_TIMEOUT`. Verification failures use `VERIFICATION_FAILED`. Before an output folder exists, failures throw `OutformError`; afterward they appear in `issues` with any completed files.
+Ctrl-C cancels download/conversion, stops native child processes and removes staging files. Completed files and their manifest remain; the CLI exits 130 (143 for SIGTERM). The JS API accepts `signal`, `timeoutMs` (default 15 minutes for the complete operation), `maxBytes` (per acquired input/output), `maxDuration` (seconds per item), `maxItems`, and `verification: "decode"` for full audio/video decoding. Encoder padding may add up to 0.25 seconds to a converted file's duration bound. There is no default duration or byte cap for audio/video; existing image/item limits still apply. Limits stop remaining work with `LIMIT_EXCEEDED`; cancellation and timeouts use `DOWNLOAD_CANCELLED` and `DOWNLOAD_TIMEOUT`. Verification failures use `VERIFICATION_FAILED`. Before an output folder exists, failures throw `OutformError`; afterward they appear in `issues` with any completed files.
 
 ```ts
 import { download, convertAudio } from "outform";
 
 const controller = new AbortController();
 const result = await download(videoUrl, {
-  output: "audio",
+  format: "mp3",
   directory: "./audio",
   signal: controller.signal,
   maxBytes: 500_000_000,
@@ -358,7 +368,7 @@ On macOS, Whisper startup can take a minute or two while Metal shaders compile. 
 
 ## Extraction layout
 
-`src/extractors/media.ts` coordinates metadata and downloads. Modules in `src/extractors/media/` handle yt-dlp, TikTok photo posts, Pinterest galleries, and Spotify public audio. Providers return shared metadata and transfer instructions; the coordinator owns filenames, manifests, partial results, and cleanup. Direct HTTP transfers share URL validation and download checks. Platforms already handled by yt-dlp do not need separate wrappers. YouTube transcript extraction remains in `youtube.ts`, alongside the existing web and PDF extractors.
+`src/extractors/media.ts` coordinates metadata and downloads. `src/extractors/media/files.ts` owns probing, MP4/MP3 export and verification. Other modules in `src/extractors/media/` handle yt-dlp, TikTok photo posts, Pinterest galleries, and Spotify public audio. Providers return shared metadata and transfer instructions; the coordinator owns filenames, manifests, partial results, and cleanup. Direct HTTP transfers share URL validation and download checks. Platforms already handled by yt-dlp do not need separate wrappers. YouTube transcript extraction remains in `youtube.ts`, alongside the existing web and PDF extractors.
 
 ## Feedback
 

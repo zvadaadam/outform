@@ -10,7 +10,7 @@ import { resolveTikTok } from "./media/tiktok";
 import { resolvePinterest } from "./media/pinterest";
 import { resolveSpotify } from "./media/spotify";
 import { downloadHttpMedia } from "./media/http";
-import { checkFileSize, checkDuration, convertMediaAudio, hashMediaFile, verifyMediaFile } from "./media/audio";
+import { checkDuration, convertMediaAudio, convertMediaVideo, hashMediaFile, verifyMediaFile } from "./media/files";
 export type { MediaAsset, MediaResult } from "./media/metadata";
 
 export function mediaDependencies(platform: MediaPlatform | null): string[] {
@@ -90,8 +90,8 @@ async function operation(
         invalidOptionsIssue(`${key} must be a positive ${key === "maxDuration" ? "number" : "safe integer"}.`),
       );
   }
-  if (options.output !== undefined && !["audio", "media"].includes(options.output))
-    throw new OutformError(invalidOptionsIssue("output must be media or audio."));
+  if (options.format !== undefined && !["mp4", "mp3", "original"].includes(options.format))
+    throw new OutformError(invalidOptionsIssue("format must be mp4, mp3, or original."));
   if (options.verification !== undefined && !["probe", "decode"].includes(options.verification))
     throw new OutformError(invalidOptionsIssue("verification must be probe or decode."));
   if (options.timeoutMs !== undefined && options.timeoutMs > 2_147_483_647)
@@ -108,7 +108,7 @@ async function operation(
   const signal = AbortSignal.any([controller.signal, ...(options.signal ? [options.signal] : [])]);
   try {
     signal.throwIfAborted();
-    return await run({ ...options, signal });
+    return await run({ ...options, format: options.format ?? "mp4", signal });
   } catch (error) {
     throw failureFor(error, source, signal);
   } finally {
@@ -135,10 +135,10 @@ export async function convertAudioFile(
 ): Promise<MediaResult> {
   if (/^https?:\/\//i.test(input))
     throw new OutformError(
-      invalidOptionsIssue('convertAudio accepts a local file. Use download(url, { output: "audio" }) for a URL.'),
+      invalidOptionsIssue('convertAudio accepts a local file. Use download(url, { format: "mp3" }) for a URL.'),
     );
   const source = resolve(input);
-  return operation(source, { ...options, output: "audio" }, async (controlled) => {
+  return operation(source, { ...options, format: "mp3" }, async (controlled) => {
     const info = await stat(source);
     if (!info.isFile()) throw mediaError("Choose a local audio or video file.", source);
     const id = basename(source, extname(source));
@@ -187,7 +187,7 @@ async function saveMedia(
   const url = result.source;
   if (!result.media.length)
     throw new OutformError(result.issues[0] ?? mediaError("No public media is available for download.", url).issue);
-  if (options.output === "audio") {
+  if (options.format === "mp3") {
     result.media = result.media.filter((asset) => asset.kind !== "image");
     if (!result.media.length)
       throw mediaError("This post contains no audio or video. Photos cannot be converted to MP3.", url);
@@ -195,8 +195,9 @@ async function saveMedia(
   if (options.maxItems !== undefined && result.media.length > options.maxItems)
     throw mediaError(`This post exceeds the ${options.maxItems}-item limit.`, url, "LIMIT_EXCEEDED");
   const nativeFiles = result.media.some((asset) => asset.kind !== "image");
+  const exporting = nativeFiles && options.format !== "original";
   const needsFfmpeg =
-    options.output === "audio" ||
+    exporting ||
     (nativeFiles && options.verification === "decode") ||
     [...transfers.values()].some((transfer) => transfer.type === "yt-dlp");
   const canProbe = nativeFiles && (await hasCommand("ffprobe"));
@@ -205,7 +206,7 @@ async function saveMedia(
       ? "ffmpeg"
       : nativeFiles &&
           !canProbe &&
-          (options.output === "audio" || options.maxDuration !== undefined || options.verification === "decode")
+          (exporting || options.maxDuration !== undefined || options.verification === "decode")
         ? "ffprobe"
         : null;
   if (missing) {
@@ -214,7 +215,8 @@ async function saveMedia(
         capability: "media",
         dependency: missing,
         setupTarget: "ffmpeg",
-        installHints: ["outform install"],
+        installHints: ["outform install ffmpeg"],
+        message: `${missing} is required for this export. Run \`outform install ffmpeg\` and retry.`,
         url,
         urlType: "media",
       }),
@@ -259,23 +261,28 @@ async function saveMedia(
         if (!saved) throw failure;
         file = saved;
       }
-      if (options.output === "audio") {
-        await checkFileSize(file, options, url);
-        const sourceHash = await hashMediaFile(file, options.signal);
-        const converted = await convertMediaAudio(file, stage, url, options, options.signal);
-        asset.sourceMedia = {
-          kind: result.platform === "local" ? converted.original.kind : (asset.kind as "audio" | "video"),
-          url: asset.url,
-          width: result.platform === "local" ? converted.original.width : asset.width,
-          height: result.platform === "local" ? converted.original.height : asset.height,
-          duration: result.platform === "local" ? converted.original.duration : asset.duration,
-        };
-        asset.kind = "audio";
-        asset.url = null;
-        asset.width = null;
-        asset.height = null;
+      if (asset.kind !== "image" && options.format !== "original") {
+        const audio = options.format === "mp3" || asset.kind === "audio";
+        if (audio) logProgress("Preparing MP3 audio...", logger);
+        const converted = audio
+          ? await convertMediaAudio(file, stage, url, options, options.signal)
+          : await convertMediaVideo(file, stage, url, options, options.signal, logger);
+        asset.artifact = converted.artifact;
+        if (converted.file !== file) {
+          asset.sourceMedia = {
+            kind: result.platform === "local" ? converted.original.kind : asset.kind,
+            url: asset.url,
+            width: result.platform === "local" ? converted.original.width : asset.width,
+            height: result.platform === "local" ? converted.original.height : asset.height,
+            duration: result.platform === "local" ? converted.original.duration : asset.duration,
+          };
+          asset.artifact.inputSha256 = await hashMediaFile(file, options.signal);
+          asset.url = null;
+        }
+        asset.kind = audio ? "audio" : "video";
+        asset.width = converted.artifact.width;
+        asset.height = converted.artifact.height;
         asset.duration = converted.artifact.duration;
-        asset.artifact = { ...converted.artifact, inputSha256: sourceHash };
         file = converted.file;
       } else asset.artifact = await verifyMediaFile(file, asset.kind, url, options, options.signal, canProbe);
       options.signal.throwIfAborted();

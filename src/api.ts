@@ -477,7 +477,7 @@ export async function download(url: string, options: DownloadOptions = {}): Prom
   }
 }
 
-export type AudioOptions = Omit<DownloadOptions, "output" | "maxItems">;
+export type AudioOptions = Omit<DownloadOptions, "format" | "maxItems">;
 
 /** Convert an existing local audio/video file to a verified MP3 without fetching its source. */
 export async function convertAudio(path: string, options: AudioOptions = {}): Promise<MediaExtractResult> {

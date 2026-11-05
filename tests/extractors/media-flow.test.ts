@@ -395,7 +395,13 @@ describe("social CLI and API downloads", () => {
   });
   test("invalid limits fail before loading or creating media", async () => {
     const f = await fixture([]);
-    for (const options of [{ maxBytes: 0 }, { maxDuration: -1 }, { maxItems: 1.5 }, { timeoutMs: 2147483648 }]) {
+    for (const options of [
+      { maxBytes: 0 },
+      { maxDuration: -1 },
+      { maxItems: 1.5 },
+      { timeoutMs: 2147483648 },
+      { format: "webm" },
+    ]) {
       const result = await f.run([
         "-e",
         `import {download} from './src/index.ts';try { await download(${JSON.stringify(source)},${JSON.stringify(options)}); } catch(error) {console.log(JSON.stringify(error.issue));}`,

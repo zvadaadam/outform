@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { pipeline } from "node:stream/promises";
 import { createReadStream, createWriteStream } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { spawn, waitForResult } from "../../utils/process";
 import { mediaError } from "../../errors";
+import { logProgress, type ExtractLogger } from "../../utils/log";
 import { record, records, text, number, type MediaFileInfo, type MediaSaveOptions } from "./metadata";
 
 const LOCAL_INPUT = [
@@ -66,7 +67,7 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
       "error",
       ...LOCAL_INPUT,
       "-show_entries",
-      "format=format_name,duration:format_tags=encoder:stream=codec_type,codec_name,width,height,duration,start_time:stream_disposition=attached_pic:stream_tags=DURATION,_STATISTICS_TAGS",
+      "format=format_name,duration:format_tags=encoder:stream=index,codec_type,codec_name,pix_fmt,color_transfer,width,height,duration,start_time:stream_disposition=attached_pic:stream_tags=DURATION,_STATISTICS_TAGS",
       "-of",
       "json",
       file,
@@ -137,6 +138,11 @@ export async function probeMediaFile(file: string, source: string, signal: Abort
     height: number(video?.height),
     hasAudio: !!audio,
     contentType,
+    videoIndex: number(video?.index),
+    videoCodec: text(video?.codec_name),
+    audioCodec: text(audio?.codec_name),
+    pixelFormat: text(video?.pix_fmt),
+    hdr: ["smpte2084", "arib-std-b67"].includes(text(video?.color_transfer)),
   };
 }
 
@@ -218,6 +224,97 @@ export async function convertMediaAudio(
     (expectedDuration !== null && Math.abs((artifact.duration ?? 0) - expectedDuration) > 0.25)
   )
     throw mediaError("The converted MP3 does not match the complete source audio.", source, "VERIFICATION_FAILED");
+  return { file: output, original, artifact };
+}
+
+export async function convertMediaVideo(
+  file: string,
+  directory: string,
+  source: string,
+  options: MediaSaveOptions,
+  signal: AbortSignal,
+  logger: ExtractLogger,
+) {
+  await checkFileSize(file, options, source);
+  const original = await probeMediaFile(file, source, signal);
+  if (original.kind !== "video")
+    throw mediaError("Expected a video, but the downloaded file contains only audio.", source, "VERIFICATION_FAILED");
+  checkDuration(original.duration, options, source);
+  const copyVideo =
+    original.videoCodec === "h264" && ["yuv420p", "yuvj420p"].includes(original.pixelFormat) && !original.hdr;
+  const copyAudio = !original.hasAudio || original.audioCodec === "aac";
+  if (original.contentType === "video/mp4" && copyVideo && copyAudio && extname(file).toLowerCase() === ".mp4") {
+    return { file, original, artifact: await verifyMediaFile(file, "video", source, options, signal, true) };
+  }
+  logProgress(
+    copyVideo && copyAudio ? "Repackaging video as MP4..." : "Converting video to MP4 (this can take time)...",
+    logger,
+  );
+  const output = join(directory, "video.mp4");
+  await run(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-v",
+      "error",
+      "-xerror",
+      "-nostdin",
+      ...LOCAL_INPUT,
+      "-i",
+      file,
+      "-map",
+      `0:${original.videoIndex}`,
+      "-map",
+      "0:a:0?",
+      "-sn",
+      "-dn",
+      "-c:v",
+      copyVideo ? "copy" : "libx264",
+      ...(copyVideo
+        ? []
+        : [
+            "-preset",
+            "fast",
+            "-crf",
+            "20",
+            "-pix_fmt",
+            "yuv420p",
+            "-fps_mode",
+            "passthrough",
+            "-vf",
+            (original.hdr
+              ? "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=limited,"
+              : "") + "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+            ...(original.hdr
+              ? ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709", "-color_range", "tv"]
+              : []),
+          ]),
+      "-c:a",
+      copyAudio ? "copy" : "aac",
+      ...(copyAudio ? [] : ["-b:a", "192k"]),
+      "-movflags",
+      "+faststart",
+      ...(options.maxBytes === undefined ? [] : ["-fs", String(options.maxBytes + 1)]),
+      "-n",
+      output,
+    ],
+    source,
+    signal,
+  );
+  const artifact = await verifyMediaFile(
+    output,
+    "video",
+    source,
+    options.maxDuration === undefined ? options : { ...options, maxDuration: options.maxDuration + 0.25 },
+    signal,
+    true,
+  );
+  if (
+    artifact.contentType !== "video/mp4" ||
+    artifact.hasAudio !== original.hasAudio ||
+    Math.abs((artifact.duration ?? 0) - original.duration) > 0.25
+  )
+    throw mediaError("The exported MP4 does not match the complete source video.", source, "VERIFICATION_FAILED");
   return { file: output, original, artifact };
 }
 

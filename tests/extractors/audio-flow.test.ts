@@ -18,21 +18,18 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-async function fixture(metadata: unknown = {}, stall = false) {
+async function fixture(metadata: unknown = {}, stall: false | "download" | "conversion" = false) {
+  const stalled = `printf ready > "$OUTFORM_TEST_READY"
+(sleep 2; printf orphan > "$OUTFORM_TEST_ORPHAN") &
+sleep 30`;
   const f = await createManagedTools(["yt-dlp", "ffmpeg", "ffprobe"], {
-    ffmpeg: `#!/bin/sh\nexec ${quote(real.ffmpeg)} "$@"\n`,
+    ffmpeg: `#!/bin/sh\n${stall === "conversion" ? `case " $* " in *" libx264 "*) ${stalled}; exit 0;; esac\n` : ""}exec ${quote(real.ffmpeg)} "$@"\n`,
     ffprobe: `#!/bin/sh\nexec ${quote(real.ffprobe)} "$@"\n`,
     "yt-dlp": `#!/bin/sh
 for arg in "$@"; do
  if [ "$arg" = '--dump-single-json' ]; then /bin/cat "$OUTFORM_TEST_METADATA"; exit 0; fi
 done
-${
-  stall
-    ? `printf ready > "$OUTFORM_TEST_READY"
-(sleep 2; printf orphan > "$OUTFORM_TEST_ORPHAN") &
-sleep 30`
-    : `exec ${quote(real["yt-dlp"])} "$@"`
-}
+${stall === "download" ? stalled : `exec ${quote(real["yt-dlp"])} "$@"`}
 `,
   });
   roots.push(f.root);
@@ -63,6 +60,32 @@ async function ffmpeg(args: string[]) {
   const stderr = await new Response(proc.stderr).text();
   if (await proc.exited) throw new Error(stderr);
 }
+async function streamInfo(file: string) {
+  const proc = Bun.spawn([real.ffprobe, "-v", "error", "-show_streams", "-of", "json", file], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const output = await new Response(proc.stdout).json();
+  expect(await proc.exited).toBe(0);
+  return output.streams as {
+    codec_type: string;
+    codec_name: string;
+    pix_fmt?: string;
+    color_transfer?: string;
+    color_primaries?: string;
+    width?: number;
+    height?: number;
+  }[];
+}
+async function videoHash(file: string) {
+  const proc = Bun.spawn(
+    [real.ffmpeg, "-v", "error", "-i", file, "-map", "0:v:0", "-c", "copy", "-f", "hash", "-hash", "sha256", "-"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  const hash = await new Response(proc.stdout).text();
+  expect(await proc.exited).toBe(0);
+  return hash;
+}
 async function generated(root: string) {
   const audio = join(root, "source.m4a"),
     video = join(root, "source.mp4"),
@@ -81,7 +104,6 @@ async function generated(root: string) {
     "yuv420p",
     "-c:a",
     "copy",
-    "-shortest",
     video,
   ]);
   await ffmpeg(["-i", video, "-an", "-c:v", "copy", silent]);
@@ -101,7 +123,279 @@ const videoInfo = (id: string, url: string) => ({
   ],
 });
 
-describe.skipIf(!available)("native audio downloads and local conversion", () => {
+describe.skipIf(!available)("native media exports and local conversion", () => {
+  test.each(["smpte2084", "arib-std-b67"])(
+    "maps %s HDR to SDR when exporting compatible MP4",
+    async (transfer) => {
+      const f = await fixture();
+      const file = join(f.root, "hdr.mkv");
+      await ffmpeg([
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=64x64:rate=10:duration=2",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p10le",
+        "-color_primaries",
+        "bt2020",
+        "-color_trc",
+        transfer,
+        "-colorspace",
+        "bt2020nc",
+        file,
+      ]);
+      const server = Bun.serve({ port: 0, fetch: () => new Response(Bun.file(file)) });
+      try {
+        const info = videoInfo("hdr", server.url.href);
+        info.formats[0] = { ...info.formats[0]!, ext: "mkv", acodec: "none" };
+        await writeFile(f.metadataPath, JSON.stringify(info));
+        const result = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+        expect(result.data.issues).toEqual([]);
+        const asset = result.data.media[0];
+        expect((await streamInfo(asset.file))[0]).toMatchObject({
+          codec_name: "h264",
+          pix_fmt: "yuv420p",
+          color_transfer: "bt709",
+          color_primaries: "bt709",
+        });
+        await ffmpeg(["-xerror", "-i", asset.file, "-f", "null", "-"]);
+      } finally {
+        server.stop(true);
+      }
+    },
+    30_000,
+  );
+
+  test("MP4 conversion respects output byte limits and can be cancelled with its descendants", async () => {
+    const f = await fixture();
+    const file = join(f.root, "compact.webm");
+    await ffmpeg([
+      "-f",
+      "lavfi",
+      "-i",
+      "color=size=64x64:rate=10:duration=5",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=duration=5",
+      "-c:v",
+      "libvpx-vp9",
+      "-c:a",
+      "libopus",
+      "-b:a",
+      "6k",
+      file,
+    ]);
+    const bytes = await readFile(file);
+    const server = Bun.serve({ port: 0, fetch: () => new Response(bytes) });
+    try {
+      const info = videoInfo("compact", server.url.href);
+      info.duration = 5;
+      info.formats[0] = { ...info.formats[0]!, ext: "webm", vcodec: "vp9", acodec: "opus" };
+      await writeFile(f.metadataPath, JSON.stringify(info));
+      const limited = await f.run([
+        "-e",
+        `import {download} from './src/index.ts';console.log(JSON.stringify((await download(${JSON.stringify(source)},${JSON.stringify({ directory: f.output, maxBytes: bytes.length + 1024 })})).json));`,
+      ]);
+      expect(limited.data.issues[0].code).toBe("LIMIT_EXCEEDED");
+      expect(limited.data.media[0].file).toBeNull();
+      expect(await readdir(limited.data.directory)).toEqual(["metadata.json"]);
+
+      const stalled = await fixture(info, "conversion");
+      const proc = stalled.spawn(["src/bin.ts", "download", source, "--output", stalled.output, "--json"]);
+      for (let i = 0; i < 300 && !(await Bun.file(stalled.env.OUTFORM_TEST_READY).exists()); i++) await Bun.sleep(20);
+      expect(await Bun.file(stalled.env.OUTFORM_TEST_READY).exists()).toBe(true);
+      proc.kill("SIGINT");
+      const cancelled = await stalled.collect(proc);
+      expect(cancelled.exit).toBe(130);
+      expect(cancelled.data.issues[0].code).toBe("DOWNLOAD_CANCELLED");
+      expect(await readdir(cancelled.data.directory)).toEqual(["metadata.json"]);
+      await Bun.sleep(2200);
+      expect(await Bun.file(stalled.env.OUTFORM_TEST_ORPHAN).exists()).toBe(false);
+    } finally {
+      server.stop(true);
+    }
+  }, 30_000);
+
+  test.each([
+    [false, "mp4"],
+    [true, "mp4"],
+    [false, "mkv"],
+  ] as const)(
+    "preserves compatible streams (full range: %s, claimed extension: %s) over a stale metadata selection",
+    async (fullRange, claimedExtension) => {
+      const f = await fixture();
+      const input = await generated(f.root);
+      const compatible = fullRange ? join(f.root, "full-range.mp4") : input.video;
+      if (fullRange)
+        await ffmpeg(["-i", input.video, "-c:v", "libx264", "-color_range", "pc", "-c:a", "copy", compatible]);
+      expect((await streamInfo(compatible))[0]?.pix_fmt).toBe(fullRange ? "yuvj420p" : "yuv420p");
+      const requests: string[] = [];
+      const server = Bun.serve({
+        port: 0,
+        fetch(req) {
+          const path = new URL(req.url).pathname;
+          requests.push(path);
+          return path === "/compatible.mp4"
+            ? new Response(Bun.file(compatible))
+            : new Response("Wrong stream", { status: 404 });
+        },
+      });
+      try {
+        const info = videoInfo("selection", new URL("/compatible.mp4", server.url).href);
+        info.formats[0]!.ext = claimedExtension;
+        const incompatible = {
+          ...info.formats[0],
+          format_id: "webm",
+          url: new URL("/wrong.webm", server.url).href,
+          ext: "webm",
+          vcodec: "vp9",
+          acodec: "opus",
+        };
+        info.formats.push(incompatible);
+        await writeFile(
+          f.metadataPath,
+          JSON.stringify({ ...info, ...incompatible, id: info.id, requested_formats: [incompatible] }),
+        );
+        const result = await f.run([
+          "src/bin.ts",
+          "download",
+          source,
+          "--format",
+          "mp4",
+          "--output",
+          f.output,
+          "--json",
+        ]);
+        expect(result.data.issues).toEqual([]);
+        expect(result.exit).toBe(0);
+        const asset = result.data.media[0];
+        expect(asset.file).toEndWith(".mp4");
+        expect(asset.artifact.contentType).toBe("video/mp4");
+        if (claimedExtension === "mp4") expect(await readFile(asset.file)).toEqual(await readFile(compatible));
+        else expect(await videoHash(asset.file)).toBe(await videoHash(compatible));
+        expect(requests.length).toBeGreaterThan(0);
+        expect(requests.every((path) => path === "/compatible.mp4")).toBe(true);
+      } finally {
+        server.stop(true);
+      }
+    },
+    30_000,
+  );
+
+  test.each([
+    ["mkv", "h264", "aac", false],
+    ["mkv", "h264", "opus", false],
+    ["webm", "vp9", "opus", false],
+    ["webm", "vp9", "none", false],
+    ["webm", "vp9", "opus", true],
+  ] as const)(
+    "exports %s %s/%s (original: %s) with honest codecs, duration and metadata",
+    async (ext, videoCodec, audioCodec, original) => {
+      const f = await fixture();
+      const input = await generated(f.root);
+      const file = join(f.root, `source.${ext}`);
+      await ffmpeg([
+        "-i",
+        input.video,
+        "-c:v",
+        videoCodec === "h264" ? "copy" : "libvpx-vp9",
+        ...(audioCodec === "none" ? ["-an"] : ["-c:a", audioCodec === "aac" ? "copy" : "libopus"]),
+        file,
+      ]);
+      const server = Bun.serve({ port: 0, fetch: () => new Response(Bun.file(file)) });
+      try {
+        const info = videoInfo("export", server.url.href);
+        info.formats[0] = { ...info.formats[0]!, ext, vcodec: videoCodec, acodec: audioCodec };
+        // Simulate metadata for a higher-quality source variant; saved dimensions must describe the file.
+        info.width = 1920;
+        info.height = 1080;
+        await writeFile(f.metadataPath, JSON.stringify(info));
+        const result = await f.run([
+          "src/bin.ts",
+          "download",
+          source,
+          ...(original ? ["--format", "original"] : []),
+          "--output",
+          f.output,
+          "--json",
+        ]);
+        expect(result.data.issues).toEqual([]);
+        expect(result.exit).toBe(0);
+        const asset = result.data.media[0];
+        const bytes = await readFile(asset.file);
+        expect(asset.artifact.sha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+        expect(asset.artifact.bytes).toBe(bytes.length);
+        if (original) {
+          expect(asset.file).toEndWith(".webm");
+          expect(bytes).toEqual(await readFile(file));
+          expect(asset.artifact.contentType).toBe("video/webm");
+          expect(asset.sourceMedia).toBeUndefined();
+        } else {
+          expect(asset.file).toEndWith(".mp4");
+          expect(asset.width).toBe(64);
+          expect(asset.height).toBe(64);
+          expect(asset.artifact.duration).toBeCloseTo(2, 0);
+          expect(asset.artifact.contentType).toBe("video/mp4");
+          expect(asset.artifact.hasAudio).toBe(audioCodec !== "none");
+          expect(asset.url).toBeNull();
+          expect(asset.sourceMedia).toMatchObject({ kind: "video", width: 1920, height: 1080 });
+          expect(asset.artifact.inputSha256).toBe(
+            createHash("sha256")
+              .update(await readFile(file))
+              .digest("hex"),
+          );
+          const streams = await streamInfo(asset.file);
+          expect(streams.find((s) => s.codec_type === "video")).toMatchObject({
+            codec_name: "h264",
+            pix_fmt: "yuv420p",
+          });
+          expect(streams.find((s) => s.codec_type === "audio")?.codec_name).toBe(
+            audioCodec === "none" ? undefined : "aac",
+          );
+          if (videoCodec === "h264") expect(await videoHash(asset.file)).toBe(await videoHash(file));
+        }
+        await ffmpeg(["-xerror", "-i", asset.file, "-f", "null", "-"]);
+        expect(await readdir(result.data.directory)).toHaveLength(2);
+        expect(JSON.parse(await readFile(join(result.data.directory, "metadata.json"), "utf8"))).toEqual(result.data);
+      } finally {
+        server.stop(true);
+      }
+    },
+    30_000,
+  );
+
+  test("default audio exports produce MP3 and explicit MP3 skips photos", async () => {
+    const f = await fixture();
+    const input = await generated(f.root);
+    const server = Bun.serve({ port: 0, fetch: () => new Response(Bun.file(input.audio)) });
+    try {
+      const info = videoInfo("sound", server.url.href);
+      info.formats[0] = { ...info.formats[0]!, vcodec: "none", ext: "m4a" };
+      await writeFile(f.metadataPath, JSON.stringify(info));
+      const result = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+      expect(result.data.issues).toEqual([]);
+      expect(result.data.media[0].file).toEndWith(".mp3");
+      expect(result.data.media[0].artifact).toMatchObject({ contentType: "audio/mpeg", verification: "decode" });
+      await writeFile(
+        f.metadataPath,
+        JSON.stringify({
+          id: "mixed",
+          entries: [{ id: "photo", thumbnails: [{ url: "https://cdn.example/photo.jpg" }] }, info],
+        }),
+      );
+      const mp3 = await f.run(["src/bin.ts", "download", source, "--format", "mp3", "--output", f.output, "--json"]);
+      expect(mp3.exit).toBe(0);
+      expect(mp3.data.media).toHaveLength(1);
+      expect(mp3.data.media[0].index).toBe(2);
+      expect(mp3.data.media[0].file).toEndWith(".mp3");
+    } finally {
+      server.stop(true);
+    }
+  }, 30_000);
+
   test.each([
     [false, undefined],
     [true, undefined],
@@ -332,7 +626,7 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
     ]) {
       const result = await f.run([
         "-e",
-        `import {verifyMediaFile} from './src/extractors/media/audio.ts';console.log(JSON.stringify(await verifyMediaFile(${JSON.stringify(file)},${JSON.stringify(kind)},'fixture',{},AbortSignal.timeout(5000),true)));`,
+        `import {verifyMediaFile} from './src/extractors/media/files.ts';console.log(JSON.stringify(await verifyMediaFile(${JSON.stringify(file)},${JSON.stringify(kind)},'fixture',{},AbortSignal.timeout(5000),true)));`,
       ]);
       expect(result.data.contentType).toBe(mime);
       expect(result.data.verification).toBe("probe");
@@ -447,10 +741,10 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
   }, 65_000);
 
   test("execution timeout stops native work and reports a structured issue", async () => {
-    const f = await fixture({ id: "post", entries: [videoInfo("video", "https://cdn.example/video.mp4")] }, true);
+    const f = await fixture({ id: "post", entries: [videoInfo("video", "https://cdn.example/video.mp4")] }, "download");
     const result = await f.run([
       "-e",
-      `import {download} from './src/index.ts'; const r=await download(${JSON.stringify(source)},{directory:${JSON.stringify(f.output)},output:"audio",timeoutMs:1000});console.log(JSON.stringify(r.json));`,
+      `import {download} from './src/index.ts'; const r=await download(${JSON.stringify(source)},{directory:${JSON.stringify(f.output)},format:"mp3",timeoutMs:1000});console.log(JSON.stringify(r.json));`,
     ]);
     expect(result.data.issues[0].code).toBe("DOWNLOAD_TIMEOUT");
     expect(result.data.media[0].file).toBeNull();
@@ -458,7 +752,7 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
   }, 10000);
 
   test("Ctrl-C cancels active native work and its child processes while preserving a usable manifest", async () => {
-    const f = await fixture({ id: "post", entries: [videoInfo("video", "https://cdn.example/video.mp4")] }, true);
+    const f = await fixture({ id: "post", entries: [videoInfo("video", "https://cdn.example/video.mp4")] }, "download");
     const proc = f.spawn(["src/bin.ts", "download", source, "--audio", "--output", f.output, "--json"]);
     for (let i = 0; i < 100 && !(await Bun.file(f.env.OUTFORM_TEST_READY).exists()); i++) await Bun.sleep(20);
     expect(await Bun.file(f.env.OUTFORM_TEST_READY).exists()).toBe(true);

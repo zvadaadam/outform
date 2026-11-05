@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { convertAudio } from "../src/api";
 import { spawn, waitForResult } from "../src/utils/process";
+import { convertMediaVideo } from "../src/extractors/media/files";
+import { silentLogger } from "../src/utils/log";
 
 const directory = await mkdtemp(join(tmpdir(), "outform-audio-smoke-"));
 try {
@@ -29,6 +31,56 @@ try {
   const cliResult = JSON.parse(cli.stdout);
   assert.equal(cliResult.media[0].artifact.verification, "decode");
   assert.deepEqual(cliResult.issues, []);
+  const video = join(directory, "hdr.mkv");
+  const generatedVideo = await waitForResult(
+    spawn([
+      "ffmpeg",
+      "-v",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc2=size=64x64:rate=10:duration=2",
+      "-i",
+      input,
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p10le",
+      "-color_primaries",
+      "bt2020",
+      "-color_trc",
+      "smpte2084",
+      "-colorspace",
+      "bt2020nc",
+      "-c:a",
+      "libopus",
+      video,
+    ]),
+  );
+  assert.equal(generatedVideo.exitCode, 0, generatedVideo.stderr);
+  const exported = await convertMediaVideo(
+    video,
+    directory,
+    video,
+    { verification: "decode" },
+    AbortSignal.timeout(30_000),
+    silentLogger,
+  );
+  assert.equal(exported.artifact.contentType, "video/mp4");
+  assert.equal(exported.artifact.hasAudio, true);
+  const inspected = await waitForResult(
+    spawn(["ffprobe", "-v", "error", "-show_streams", "-of", "json", exported.file]),
+  );
+  assert.equal(inspected.exitCode, 0, inspected.stderr);
+  const streams = JSON.parse(inspected.stdout).streams;
+  assert(
+    streams.some(
+      (s: { codec_name: string; pix_fmt: string; color_transfer: string }) =>
+        s.codec_name === "h264" && s.pix_fmt === "yuv420p" && s.color_transfer === "bt709",
+    ),
+  );
+  assert(streams.some((s: { codec_name: string }) => s.codec_name === "aac"));
   const controller = new AbortController();
   const running = spawn(["ffmpeg", "-v", "error", "-re", "-f", "lavfi", "-i", "sine=duration=30", "-f", "null", "-"], {
     signal: controller.signal,
@@ -39,7 +91,7 @@ try {
   } finally {
     clearTimeout(stop);
   }
-  process.stderr.write(`MP3 conversion passed (${bytes.length} verified bytes)\n`);
+  process.stderr.write(`MP3 conversion passed (${bytes.length} verified bytes); HDR video exported as H.264/AAC MP4\n`);
 } finally {
   await rm(directory, { recursive: true, force: true });
 }

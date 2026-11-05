@@ -33,7 +33,7 @@ export interface MediaFileInfo {
   inputSha256?: string;
 }
 export interface MediaSaveOptions {
-  output?: "media" | "audio";
+  format?: "mp4" | "mp3" | "original";
   signal?: AbortSignal;
   maxBytes?: number;
   maxDuration?: number;

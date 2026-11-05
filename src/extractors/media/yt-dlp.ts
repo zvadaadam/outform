@@ -238,13 +238,16 @@ export async function downloadYtDlpMedia(
   const info = { ...entry };
   for (const key of ["entries", "_filename", "filename", "filepath", "requested_downloads", "__files_to_move"])
     delete info[key];
-  if (options.output === "audio") {
-    for (const key of ["requested_formats", "requested_downloads"]) delete info[key];
-  }
+  // Metadata may already contain a selection made before the export format was chosen.
+  if (options.format !== "original") delete info.requested_formats;
   await writeFile(join(stage, "info.json"), JSON.stringify(info));
   const downloaded = await runDownloader(
     [
-      ...(options.output === "audio" ? ["-f", "bestaudio/best"] : []),
+      ...(options.format === "mp3"
+        ? ["-f", "bestaudio/best"]
+        : options.format === "original"
+          ? []
+          : ["-S", "res,vcodec:h264,acodec:aac"]),
       ...(options.maxBytes === undefined ? [] : ["--max-filesize", String(options.maxBytes)]),
       "--load-info-json",
       join(stage, "info.json"),
