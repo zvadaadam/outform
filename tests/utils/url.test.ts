@@ -99,6 +99,15 @@ describe("isValidUrl", () => {
 });
 
 describe("social post routing", () => {
+  test.each([
+    "https://www.facebook.com/share/r/1NBLox8hiK/?mibextid=wwXIfr",
+    "https://m.facebook.com/share/r/1NBLox8hiK/",
+    "https://facebook.com/share/v/1NBLox8hiK",
+  ])("recognizes Facebook video share links: %s", (url) => {
+    expect(mediaPlatform(url)).toBe("facebook");
+    expect(detectUrlType(url)).toBe("media");
+  });
+
   test.each(["www.reddit.com", "old.reddit.com", "reddit.com"])(
     "keeps %s posts readable while allowing explicit downloads",
     (host) => {
@@ -130,5 +139,10 @@ describe("social post routing", () => {
     "https://instagram.com.example.org/p/abc/",
     "https://fakepinterest.com/pin/123/",
     "https://example.com/?url=https://instagram.com/p/abc/",
+    "https://facebook.com.example.org/share/r/1NBLox8hiK/",
+    "https://www.facebook.com/share/r/",
+    "https://www.facebook.com/share/r/1NBLox8hiK/extra",
+    "https://www.facebook.com/share/p/1NBLox8hiK/",
+    "https://www.facebook.com/creator/",
   ])("does not treat %s as a supported post", (url) => expect(detectUrlType(url)).toBe("web"));
 });

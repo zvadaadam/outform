@@ -41,6 +41,7 @@ export function mediaPlatform(input: string): MediaPlatform | null {
     ["facebook.com", "fb.watch"].includes(host) &&
     (host === "fb.watch" ||
       /\/(?:videos|reel|watch)(?:\/|$)/.test(path) ||
+      /^\/share\/[rv]\/[A-Za-z0-9]+\/?$/.test(path) ||
       (path === "/video.php" && url.searchParams.has("v")))
   )
     return "facebook";
