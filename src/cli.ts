@@ -36,7 +36,7 @@ Give it a URL or file path. Get back clean content for humans, scripts, and codi
 
 Usage:
   outform <source> [options]
-  outform download <url> [--format mp4|mp3|original] [--output <directory>] [--json|--text]
+  outform download <url> [--audio] [--output <directory>] [--json|--text]
   outform audio <file> [--output <directory>] [--json|--text]
   outform [options]      Read a URL or file path from stdin
   outform doctor [--json]
@@ -53,7 +53,7 @@ Default behavior:
   Quote URLs that contain shell characters like ? or &.
 
 Options:
-  --audio                  Shortcut for download --format mp3
+  --audio                  Save audio only as MP3 (download command)
   --json                   Output structured JSON
   --text                   Output plain text
   --chapters               Generate missing YouTube chapters with short descriptions
@@ -113,14 +113,17 @@ const DOWNLOAD_HELP = `
 outform download <url> [options]
 
 Save public media and metadata.json in a new folder under ./outform-downloads.
+By default, save MP4 videos, MP3 audio and original images.
 
-  --format mp4       MP4 video (H.264/AAC), MP3 audio, original images (default)
-  --format mp3       Audio only; skip photos and save MP3
-  --format original  Preserve source formats, including MKV/WebM
-  --audio            Shortcut for --format mp3
+  --audio            Save audio only as MP3; skip photos
   --output <dir>     Parent directory for saved files
   --json             Print the download report as JSON
   --text             Print the download report as plain text
+
+Advanced formats:
+  --format original  Preserve source formats, including MKV/WebM
+  --format mp4       Explicitly select the default export
+  --format mp3       Same as --audio
 
 Compatible MP4/MP3 files are preserved. Other media is repackaged or converted;
 encoding can take time and slightly change quality. Original mode avoids encoding.
@@ -132,7 +135,7 @@ Ctrl-C cancels work and removes temporary files; completed files remain.
 
 Examples:
   outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ'
-  outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --format mp3 --json
+  outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --audio --json
   outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --format original
 `.trim();
 

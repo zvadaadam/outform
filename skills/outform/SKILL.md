@@ -59,7 +59,7 @@ printf '%s\n' 'https://example.com?a=1&b=2' | outform
 | `--json`                           | Structured JSON instead of Markdown                   |
 | `--text`                           | Plain text instead of Markdown                        |
 | `--chapters`                       | Generate missing YouTube topic chapters (optional AI) |
-| `--audio`                          | Shortcut for download `--format mp3`                  |
+| `--audio`                          | Save audio only as MP3 with the download command      |
 | `--format <format>`                | Download: mp4/mp3/original; extraction: md/txt/json   |
 | `--output <path>`                  | Result file; download parent directory                |
 | `--lang <code>`                    | YouTube caption language (default `en`)               |
@@ -93,7 +93,7 @@ outform download 'https://www.instagram.com/p/BoHk1haB5tM/' --output ./media --j
 
 Supports public Instagram Reels/photos/carousels, X/Twitter videos, TikTok videos/photo slides, Pinterest videos/images/story pages, and Facebook/Vimeo videos. Reddit posts retain ordinary web extraction for readable discussions; use `outform download <reddit-post-url>` explicitly for media. Reddit may block anonymous requests. No account connection, browser cookies, or yt-dlp user configuration is used. Private, removed, restricted, and rate-limited posts return structured issues; do not promise that every public URL works.
 
-Download reports support `--json` or `--text` (mutually exclusive); `--format mp4|mp3|original` chooses the saved media. Existing `--format md|txt|json` report options retain the default media export. Use `download --help` for focused help. Regular social extraction returns publisher text and media links without saving files. It does not transcribe audio, OCR images, or generate chapters. CDN links can expire. `download` saves media plus `metadata.json` in a new post folder beneath `./outform-downloads` or `--output <directory>`. Numbered filenames preserve order; repeated runs never overwrite previous downloads. TikTok photo posts include the slides and available soundtrack. Default exports save MP4 (H.264 + AAC) videos, MP3 audio and original images. Silent videos remain silent. `--format original` keeps source formats such as MKV/WebM without encoding. Limits: 50 items per post, 50 MB per image.
+Use `download URL` for media and `download URL --audio` when the user wants only sound. Download reports support `--json` or `--text` (mutually exclusive). Advanced `--format mp4|mp3|original` overrides remain available; `--format mp3` is equivalent to `--audio`. Existing `--format md|txt|json` report options retain the default media export. Use `download --help` for focused help. Regular social extraction returns publisher text and media links without saving files. It does not transcribe audio, OCR images, or generate chapters. CDN links can expire. `download` saves media plus `metadata.json` in a new post folder beneath `./outform-downloads` or `--output <directory>`. Numbered filenames preserve order; repeated runs never overwrite previous downloads. TikTok photo posts include the slides and available soundtrack. Default exports save MP4 (H.264 + AAC) videos, MP3 audio and original images. Silent videos remain silent. `--format original` keeps source formats such as MKV/WebM without encoding. Limits: 50 items per post, 50 MB per image.
 
 JSON has `type: "media"`, `platform`, `id`, `title`, `description`, `author`, `thumbnail`, `source`, `uploadDate`, `media`, `directory`, and `issues`. Each asset has `id`, `index` (1-based), `kind`, `url`, `thumbnail`, `width`, `height`, `duration` (seconds), and `file` (absolute path after download). Missing fields are null; split-stream videos may have no direct URL. Always check `issues` and `file`: partial download failure keeps successful files. Any entry in `issues` causes a nonzero exit, even when every file was saved. Progress goes to stderr, manifest output to stdout.
 
@@ -107,7 +107,7 @@ Use `outform install youtube ffmpeg` for other social downloads without installi
 
 ```bash
 outform install youtube ffmpeg
-outform download "VIDEO_URL" --format mp3 --output ./audio --json
+outform download "VIDEO_URL" --audio --output ./audio --json
 outform download "VIDEO_URL" --format original --output ./originals --json
 outform audio ./saved-video.mp4 --output ./audio --json
 ```

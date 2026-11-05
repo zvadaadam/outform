@@ -44,7 +44,7 @@ YouTube videos include title, description, channel, thumbnail URL, upload date, 
 ## Options
 
 ```text
---audio                  Shortcut for download --format mp3
+--audio                  Save audio only as MP3 (download command)
 --json                   Output structured JSON
 --text                   Output plain text
 --chapters               Generate missing YouTube chapters with short descriptions
@@ -91,7 +91,7 @@ Read a public post's caption, author, title, date, thumbnails, and ordered media
 outform --json 'https://www.instagram.com/reel/DfAZMAjseOQ/'
 ```
 
-Save the media files and a `metadata.json` manifest. Use `--format` for the media export and `--json` or `--text` for the report:
+Save the media files and a `metadata.json` manifest. Add `--audio` for sound only; use `--json` or `--text` for the report:
 
 ```bash
 outform download 'https://www.instagram.com/reel/DfAZMAjseOQ/'
@@ -118,21 +118,21 @@ For other social downloads, `outform install youtube ffmpeg` prepares the shared
 
 ## Export formats
 
-| Choice                     | Saved files                            |
-| -------------------------- | -------------------------------------- |
-| Default / `--format mp4`   | MP4 videos, MP3 audio, original images |
-| `--format mp3` / `--audio` | MP3 audio only; photos omitted         |
-| `--format original`        | Source formats; no re-encoding         |
+| Choice              | Saved files                            |
+| ------------------- | -------------------------------------- |
+| Default             | MP4 videos, MP3 audio, original images |
+| `--audio`           | MP3 audio only; photos omitted         |
+| `--format original` | Source formats; no re-encoding         |
 
 Outform prefers H.264/AAC streams at the best available resolution. Compatible MP4 files are kept byte-for-byte; compatible streams in another container are repackaged without encoding. Other video tracks are encoded as H.264/yuv420p, and incompatible audio tracks as AAC. HDR video is tone-mapped to SDR for playback compatibility; original mode preserves HDR. Silent videos remain silent. Encoding takes extra time and may slightly change quality; it does not improve the source. `--format original` preserves source formats and avoids encoding. MP4/MP3 exports require FFmpeg and FFprobe; image-only posts do not.
 
-`--json` and `--text` change only the report. Existing `--format md|txt|json` report options still work with downloads and use the default media export. Use `outform download --help` for focused usage.
+`--json` and `--text` change only the report. Advanced format overrides remain available: `--format mp4` explicitly selects the default, and `--format mp3` is equivalent to `--audio`. Existing `--format md|txt|json` report options still work with downloads and use the default media export. Use `outform download --help` for focused usage.
 
 Request just the audio explicitly:
 
 ```bash
 outform install youtube ffmpeg
-outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --format mp3 --output ./audio --json
+outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --audio --output ./audio --json
 ```
 
 For a video or audio file already on your computer, conversion needs only FFmpeg:
