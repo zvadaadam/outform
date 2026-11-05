@@ -133,6 +133,20 @@ async function fixture(html = page(), failure = "") {
 }
 
 describe("Spotify CLI and API without media tools", () => {
+  test("standard exports explain the missing converter before requesting podcast bytes", async () => {
+    const f = await fixture();
+    const result = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+    expect(result.exit).toBe(1);
+    expect(result.data.issues[0]).toMatchObject({
+      code: "MISSING_DEPENDENCY",
+      setupCommand: "outform install ffmpeg",
+      installHints: ["outform install ffmpeg"],
+    });
+    expect(result.stderr).toContain("outform install ffmpeg");
+    expect(await readFile(f.calls, "utf8")).not.toContain(original);
+    expect(await readdir(f.root)).not.toContain("downloads");
+  });
+
   test("extracts full description, inspects ready, then downloads exact original bytes and manifest", async () => {
     const f = await fixture();
     const inspected = await f.run([
@@ -145,7 +159,16 @@ describe("Spotify CLI and API without media tools", () => {
     expect(extracted.data.description).toBe("Full description & publisher notes.");
     expect(extracted.data.media[0].file).toBeNull();
     expect(await readFile(f.calls, "utf8")).not.toContain(original);
-    const downloaded = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+    const downloaded = await f.run([
+      "src/bin.ts",
+      "download",
+      source,
+      "--format",
+      "original",
+      "--output",
+      f.output,
+      "--json",
+    ]);
     expect(downloaded.exit).toBe(0);
     expect(await readFile(downloaded.data.media[0].file)).toEqual(Buffer.from([73, 68, 51, 4, 0, 0]));
     expect(JSON.parse(await readFile(join(downloaded.data.directory, "metadata.json"), "utf8"))).toEqual(
@@ -158,7 +181,16 @@ describe("Spotify CLI and API without media tools", () => {
     const extracted = await f.run(["src/bin.ts", source, "--json"]);
     expect(extracted.data.title).toBe("A long episode");
     expect(extracted.data.media).toEqual([]);
-    const downloaded = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+    const downloaded = await f.run([
+      "src/bin.ts",
+      "download",
+      source,
+      "--format",
+      "original",
+      "--output",
+      f.output,
+      "--json",
+    ]);
     expect(downloaded.exit).toBe(1);
     expect(downloaded.data.issues[0].code).toBe("MEDIA_UNAVAILABLE");
     expect(await readdir(f.root)).not.toContain("downloads");
@@ -170,7 +202,16 @@ describe("Spotify CLI and API without media tools", () => {
     ["429", "RATE_LIMITED"],
   ])("rejects %s audio responses without leaving partial files", async (failure, code) => {
     const f = await fixture(page(), failure);
-    const downloaded = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+    const downloaded = await f.run([
+      "src/bin.ts",
+      "download",
+      source,
+      "--format",
+      "original",
+      "--output",
+      f.output,
+      "--json",
+    ]);
     expect(downloaded.exit).toBe(1);
     expect(downloaded.data.issues[0].code).toBe(code);
     expect(downloaded.data.media[0].file).toBeNull();
@@ -178,7 +219,16 @@ describe("Spotify CLI and API without media tools", () => {
   });
   test("description failure keeps downloadable audio and reports the missing metadata", async () => {
     const f = await fixture(page(), "description");
-    const downloaded = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+    const downloaded = await f.run([
+      "src/bin.ts",
+      "download",
+      source,
+      "--format",
+      "original",
+      "--output",
+      f.output,
+      "--json",
+    ]);
     expect(downloaded.data.media[0].file).toBeString();
     expect(downloaded.data.issues[0].message).toContain("description unavailable");
     expect(downloaded.exit).toBe(1);

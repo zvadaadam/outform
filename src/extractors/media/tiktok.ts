@@ -22,11 +22,16 @@ export function parseTikTokSlides(html: string): Info[] {
   });
 }
 
-export async function resolveTikTok(url: string): Promise<ResolvedMedia> {
+export async function resolveTikTok(url: string, signal?: AbortSignal): Promise<ResolvedMedia> {
   const request = url.replace(/\/photo\/(\d+)/, "/video/$1");
-  const info = await loadYtDlpInfo(url, "tiktok", request);
+  const info = await loadYtDlpInfo(url, "tiktok", request, signal);
   if (/\/photo\//.test(url) || records(info.formats).every((f) => f.vcodec === "none")) {
-    const html = await fetchMediaPage(httpUrl(info.webpage_url) ?? request, { "User-Agent": "Mozilla/5.0" }, url);
+    const html = await fetchMediaPage(
+      httpUrl(info.webpage_url) ?? request,
+      { "User-Agent": "Mozilla/5.0" },
+      url,
+      signal,
+    );
     let slides: Info[];
     try {
       slides = parseTikTokSlides(html);

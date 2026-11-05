@@ -1,5 +1,14 @@
 import { parseArgs } from "util";
-import { render, resolveUrlType, extract, download, type ExtractFormat, type ExtractProvider } from "./api";
+import {
+  render,
+  resolveUrlType,
+  extract,
+  download,
+  convertAudio,
+  type ExtractFormat,
+  type ExtractProvider,
+  type DownloadOptions,
+} from "./api";
 import { checkDependencies, getDoctorReport } from "./utils/deps";
 import { createStderrLogger, log, logError, logSuccess } from "./utils/log";
 import { writeOutput } from "./output/formatter";
@@ -27,7 +36,8 @@ Give it a URL or file path. Get back clean content for humans, scripts, and codi
 
 Usage:
   outform <source> [options]
-  outform download <url> [--output <directory>] [--json|--text]
+  outform download <url> [--audio] [--output <directory>] [--json|--text]
+  outform audio <file> [--output <directory>] [--json|--text]
   outform [options]      Read a URL or file path from stdin
   outform doctor [--json]
   outform install [target ...] [--dry-run] [--json]
@@ -43,13 +53,14 @@ Default behavior:
   Quote URLs that contain shell characters like ? or &.
 
 Options:
+  --audio                  Save audio only as MP3 (download command)
   --json                   Output structured JSON
   --text                   Output plain text
   --chapters               Generate missing YouTube chapters with short descriptions
   --output <path>          Result file; with download, parent directory for media
   --lang <code>            Caption language for YouTube (default: en)
   --provider <name>        Chapter provider for --chapters (claude|codex|none)
-  --format <md|txt|json>   Advanced format override
+  --format <format>        Extraction: md|txt|json; download: mp4|mp3|original
   --check                  Alias for human-readable doctor output
   --version                Show version
   --help                   Show this help
@@ -59,17 +70,21 @@ Commands:
   install                  Prepare extraction tools and model (no target needed)
   install all              Also install both AI CLIs (optional)
   feedback                 Send feedback or a failed-task report; see feedback --help
-  download                 Save public videos, images, podcast audio, and carousel items (no account connection)
+  download                 Save MP4 videos, MP3 audio and original images; see download --help
+  audio                    Convert a local audio/video file to MP3 without downloading
 
 Media downloads:
   Instagram, X/Twitter, TikTok, Pinterest, Facebook, Reddit, Vimeo, and YouTube post/video URLs.
-  Spotify public podcast originals also work, without installed tools; no music or preview downloads.
+  Spotify public podcast audio also works; no music or preview downloads.
   Saves media and metadata.json under ./outform-downloads, or --output <directory>.
+  MP4/MP3 exports require ffmpeg/ffprobe; run outform install ffmpeg. Ctrl-C removes temporary files.
+  Use --format original to preserve source formats, including tool-free Spotify originals.
   Each post gets its own folder. Restricted, removed, or rate-limited posts may be unavailable.
 
 Setup prerequisites:
   macOS: Homebrew with a compatible Whisper bottle.
   Linux: glibc x64/arm64, tar, and OpenMP/C++ runtimes (libgomp1/libstdc++6 on Debian/Ubuntu).
+  Linux x64 FFmpeg also needs glibc >= 2.28, kernel >= 4.18, and xz (xz-utils on Debian/Ubuntu).
 
 Setup options:
   --dry-run                Show the setup plan without installing
@@ -86,10 +101,54 @@ Examples:
   outform ./report.pdf
   outform ./notes.md
   outform download 'https://www.instagram.com/reel/DfAZMAjseOQ/'
+  outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --audio
+  outform audio ./video.mp4
   outform doctor --json
   outform install
   outform install youtube
   printf '%s\\n' 'https://example.com?a=1&b=2' | outform
+`.trim();
+
+const DOWNLOAD_HELP = `
+outform download <url> [options]
+
+Save public media and metadata.json in a new folder under ./outform-downloads.
+By default, save MP4 videos, MP3 audio and original images.
+
+  --audio            Save audio only as MP3; skip photos
+  --output <dir>     Parent directory for saved files
+  --json             Print the download report as JSON
+  --text             Print the download report as plain text
+
+Advanced formats:
+  --format original  Preserve source formats, including MKV/WebM
+  --format mp4       Explicitly select the default export
+  --format mp3       Same as --audio
+
+Compatible MP4/MP3 files are preserved. Other media is repackaged or converted;
+encoding can take time and slightly change quality. Original mode avoids encoding.
+Silent videos remain silent. Audio-only export requires an audio track.
+Use outform install youtube ffmpeg to prepare downloads without Whisper.
+Spotify originals and image-only posts do not need FFmpeg.
+Restricted, removed or rate-limited posts may be unavailable.
+Ctrl-C cancels work and removes temporary files; completed files remain.
+
+Examples:
+  outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ'
+  outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --audio --json
+  outform download 'https://www.youtube.com/watch?v=aqz-KE-bpKQ' --format original
+`.trim();
+
+const AUDIO_HELP = `
+outform audio <file> [--output <directory>] [--json|--text]
+
+Convert a saved audio or video file to MP3 without fetching its source again.
+The input is preserved. Existing MP3 bytes are copied; other audio is encoded at 192 kbps.
+The output is fully decoded and hashed before it is saved with metadata.json.
+Run outform install ffmpeg first. Ctrl-C cancels and removes temporary files.
+
+Example:
+  outform audio ./video.mp4 --output ./audio --json
 `.trim();
 
 export interface CliOptions {
@@ -120,23 +179,31 @@ async function readUrlFromStdin(): Promise<string | undefined> {
   return firstLine || undefined;
 }
 
-function resolveFormat(values: Record<string, unknown>): ExtractFormat {
+function resolveFormat(values: Record<string, unknown>, mediaCommand = false): ExtractFormat {
   const json = values.json as boolean;
   const text = values.text as boolean;
-  const format = values.format as string;
+  const selected = values.format as string | undefined;
+  const format = mediaCommand && ["mp4", "mp3", "original"].includes(selected ?? "") ? "md" : (selected ?? "md");
 
   if (json && text) {
     throw new Error("Choose only one of --json or --text.");
   }
 
-  if (json) return "json";
-  if (text) return "txt";
-
   if (!["md", "txt", "json"].includes(format)) {
-    throw new Error(`Invalid format: ${format}. Use md, txt, or json.`);
+    throw new Error(`Invalid format: ${format}. Use ${mediaCommand ? "mp4, mp3, or original" : "md, txt, or json"}.`);
   }
 
+  if (json) return "json";
+  if (text) return "txt";
   return format as ExtractFormat;
+}
+
+function resolveMediaFormat(values: Record<string, unknown>, converting: boolean): DownloadOptions["format"] {
+  const selected = values.format;
+  const format = selected === "mp4" || selected === "mp3" || selected === "original" ? selected : undefined;
+  if ((values.audio || converting) && format && format !== "mp3")
+    throw new Error("Audio export produces MP3. Use --format mp3, or omit --audio to keep the video.");
+  return format ?? (values.audio || converting ? "mp3" : "mp4");
 }
 
 function resolveChapters(values: Record<string, unknown>): boolean {
@@ -250,9 +317,10 @@ export async function run(args: string[]): Promise<void> {
         stdout: { type: "boolean", default: false },
         chapters: { type: "boolean", default: false },
         json: { type: "boolean", default: false },
+        audio: { type: "boolean", default: false },
         text: { type: "boolean", default: false },
         output: { type: "string" },
-        format: { type: "string", default: "md" },
+        format: { type: "string" },
         lang: { type: "string", default: "en" },
         provider: { type: "string" },
         run: { type: "boolean", default: false },
@@ -272,7 +340,7 @@ export async function run(args: string[]): Promise<void> {
   const command = positionals[0];
 
   if (values.help) {
-    console.log(HELP);
+    process.stdout.write((command === "download" ? DOWNLOAD_HELP : command === "audio" ? AUDIO_HELP : HELP) + "\n");
     return;
   }
 
@@ -307,7 +375,15 @@ export async function run(args: string[]): Promise<void> {
   }
 
   const downloading = command === "download";
-  if (downloading && (values.chapters || values.provider || values.raw || positionals.length > 2)) {
+  const converting = command === "audio";
+  if (values.audio && !downloading && !converting) {
+    cliError(
+      new Error("Use --audio with outform download, or outform audio <file> for local conversion."),
+      values.json,
+    );
+    return;
+  }
+  if ((downloading || converting) && (values.chapters || values.provider || values.raw || positionals.length > 2)) {
     cliError(
       new Error(
         "Use outform download <url> [--output <directory>] [--json|--text]. Chapter and provider options apply to extraction only.",
@@ -316,7 +392,7 @@ export async function run(args: string[]): Promise<void> {
     );
     return;
   }
-  const url = positionals[downloading ? 1 : 0] ?? (await readUrlFromStdin());
+  const url = positionals[downloading || converting ? 1 : 0] ?? (await readUrlFromStdin());
   if (!url) {
     cliError(
       new Error("No source provided. Pass a URL or file path, or pipe one on stdin. Run `outform --help` for usage."),
@@ -333,9 +409,11 @@ export async function run(args: string[]): Promise<void> {
   let format: ExtractFormat;
   let chaptersRequested: boolean;
   let provider: ExtractProvider | undefined;
+  let mediaFormat: DownloadOptions["format"];
 
   try {
-    format = resolveFormat(values);
+    format = resolveFormat(values, downloading || converting);
+    if (downloading || converting) mediaFormat = resolveMediaFormat(values, converting);
     chaptersRequested = resolveChapters(values);
     provider = resolveProvider(values, chaptersRequested);
   } catch (error) {
@@ -352,9 +430,26 @@ export async function run(args: string[]): Promise<void> {
     output: values.output as string | undefined,
   };
 
+  const controller = new AbortController();
+  let interrupted = 0;
+  const interrupt = () => {
+    interrupted = 130;
+    controller.abort();
+  };
+  const terminate = () => {
+    interrupted = 143;
+    controller.abort();
+  };
+  if (downloading || converting) {
+    process.once("SIGINT", interrupt);
+    process.once("SIGTERM", terminate);
+  }
   try {
-    if (downloading) {
-      const result = await download(url, { directory: options.output, logger: createStderrLogger() });
+    if (downloading || converting) {
+      const saveOptions = { directory: options.output, logger: createStderrLogger(), signal: controller.signal };
+      const result = converting
+        ? await convertAudio(url, saveOptions)
+        : await download(url, { ...saveOptions, format: mediaFormat });
       await emitOutput(render(result, options.format));
       if (result.issues.length) {
         const saved = result.json.media.filter((asset) => asset.file).length;
@@ -380,5 +475,9 @@ export async function run(args: string[]): Promise<void> {
   } catch (error) {
     cliError(error, args.includes("--json"), args[0] === "install" || args[0] === "setup");
     return;
+  } finally {
+    process.removeListener("SIGINT", interrupt);
+    process.removeListener("SIGTERM", terminate);
+    if (interrupted) process.exitCode = interrupted;
   }
 }
