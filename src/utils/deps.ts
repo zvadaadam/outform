@@ -31,7 +31,10 @@ const INSTALL_HINTS: Record<SetupTarget, Record<HintPlatform, string[]>> = {
   },
   ffmpeg: {
     darwin: ["outform install ffmpeg", "Use macOS x64 or arm64 for managed ffmpeg/ffprobe"],
-    linux: ["outform install ffmpeg", "Use Linux x64 or arm64 for managed ffmpeg/ffprobe"],
+    linux: [
+      "outform install ffmpeg",
+      "Use Linux x64 or arm64; x64 needs glibc >= 2.28, kernel >= 4.18, tar and xz (Debian/Ubuntu: sudo apt-get install -y tar xz-utils)",
+    ],
     win32: ["outform install ffmpeg", "Use Windows x64 for managed ffmpeg/ffprobe"],
   },
   claude: {

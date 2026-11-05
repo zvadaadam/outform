@@ -30,6 +30,12 @@
       "ffprobe-linux-ia32": "a13b4cce0a4b9bd6714672e4df81076ec06f4c295d798162d48e3de68c781d6d",
       "ffprobe-linux-x64": "4f231a1960d83e403d08f7971e271707bec278a9ae18e21b8b5b03186668450d",
       "ffprobe-win32-x64": "3a7e2dc003dc2cd1472827e4c7c4f056ae1ae0ae7c5bbc580c99b49827351ba4"
+    },
+    "linuxX64": {
+      "version": "n8.1.3-27-g8dca1586f4",
+      "baseUrl": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/",
+      "asset": "ffmpeg-n8.1.3-27-g8dca1586f4-linux64-gpl-8.1.tar.xz",
+      "sha256": "41e9c565594c390622cf968d82fa4135d9e9a11d06c1515644288cbc844e3380"
     }
   },
   "deno": {

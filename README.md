@@ -231,7 +231,7 @@ To install or repair part of the toolchain, use `outform install <target>`. Mult
 ### Platform requirements
 
 - **macOS:** Homebrew is required for Whisper. Setup reuses compatible `whisper.cpp` (>= 1.9.2 and < 2.0.0) or requests a prebuilt bottle. Bottle availability depends on macOS version and architecture; setup does not compile from source. Apple Silicon has been smoke-tested. Intel and older macOS require a compatible Homebrew installation.
-- **Linux:** glibc, x64 or arm64, and `tar`. Whisper uses upstream binaries with OpenMP and C++ runtimes. On Debian/Ubuntu, setup can install missing runtimes when already root; otherwise it reports `sudo apt-get update && sudo apt-get install -y libgomp1 libstdc++6`. Ubuntu 22.04/24.04 and Debian 12 were smoke-tested, with x64 under emulation.
+- **Linux:** glibc, x64 or arm64, and `tar`. Linux x64 FFmpeg uses a pinned BtbN build and also requires glibc >= 2.28, kernel >= 4.18, and `xz` (`sudo apt-get install -y tar xz-utils` on Debian/Ubuntu). Rerun `outform install ffmpeg` after upgrading to replace the older x64 build, which can crash on HLS streams. Whisper uses upstream binaries with OpenMP and C++ runtimes. On Debian/Ubuntu, setup can install missing runtimes when already root; otherwise it reports `sudo apt-get update && sudo apt-get install -y libgomp1 libstdc++6`. Ubuntu 22.04/24.04 and Debian 12 were smoke-tested, with x64 under emulation.
 - **Windows x64:** setup downloads prebuilt extraction tools.
 - Other systems, including Linux musl, do not have fully supported video setup. Built-in extraction remains available.
 
@@ -430,7 +430,7 @@ npm run build
 bun run build:binary
 ```
 
-Managed binary versions and checksums live in `src/utils/tool-assets.json`. When updating them, verify upstream release checksums and smoke-test executable startup on each supported platform. Linux Whisper archive pins and required library lists are in the same manifest; Windows retains its separate tested release. macOS uses compatible Homebrew versions. Model pins live in `src/utils/deps.ts`. Validate real transcription and JSON output when updating Whisper, not just executable startup.
+Managed binary versions and checksums live in `src/utils/tool-assets.json`. When updating them, verify upstream release checksums and smoke-test executable startup on each supported platform. Linux x64 FFmpeg pins use the last BtbN build of a month, retained upstream for two years; refresh those pins before they expire and test HLS downloads, not just startup. Linux Whisper archive pins and required library lists are in the same manifest; Windows retains its separate tested release. macOS uses compatible Homebrew versions. Model pins live in `src/utils/deps.ts`. Validate real transcription and JSON output when updating Whisper, not just executable startup.
 
 ## License
 

@@ -97,6 +97,33 @@ describe.skipIf(process.platform === "win32")("owned extraction runtimes", () =>
     expect((await getSetupPlans(["deno"]))[0]?.steps?.[0]?.kind).toBe("zip");
   });
 
+  test("upgrades legacy FFmpeg only on Linux x64 while preserving other platforms' receipts", async () => {
+    const directory = join(process.env.OUTFORM_TOOLS_DIR!, "ffmpeg", "b6.1.1", `${process.platform}-${process.arch}`);
+    const files: Record<string, string> = {};
+    for (const command of ["ffmpeg", "ffprobe"]) {
+      const path = join(directory, "bin", command);
+      await executable(path, `echo "${command} version 6.1.1"`);
+      files[command] = createHash("sha256")
+        .update(await readFile(path))
+        .digest("hex");
+    }
+    const { version, baseUrl, sha256 } = assets.ffmpeg;
+    await writeFile(
+      join(directory, "receipt.json"),
+      JSON.stringify({
+        release: createHash("sha256").update(JSON.stringify({ version, baseUrl, sha256 })).digest("hex"),
+        version: "b6.1.1",
+        platform: process.platform,
+        arch: process.arch,
+        files,
+      }),
+    );
+    const needsUpgrade = process.platform === "linux" && process.arch === "x64";
+    expect(await hasManagedTool("ffmpeg")).toBe(!needsUpgrade);
+    expect(await hasManagedTool("ffprobe")).toBe(!needsUpgrade);
+    expect((await getSetupPlans(["ffmpeg"]))[0]?.installed).toBe(!needsUpgrade);
+  });
+
   async function stubDownload(version: string) {
     const plan = (await getSetupPlans(["deno"]))[0];
     const step = plan?.steps?.[0];

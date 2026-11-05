@@ -82,6 +82,7 @@ Media downloads:
 Setup prerequisites:
   macOS: Homebrew with a compatible Whisper bottle.
   Linux: glibc x64/arm64, tar, and OpenMP/C++ runtimes (libgomp1/libstdc++6 on Debian/Ubuntu).
+  Linux x64 FFmpeg also needs glibc >= 2.28, kernel >= 4.18, and xz (xz-utils on Debian/Ubuntu).
 
 Setup options:
   --dry-run                Show the setup plan without installing

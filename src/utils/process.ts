@@ -22,6 +22,11 @@ const MANAGED_TOOLS = {
 export type ManagedToolTarget = (typeof MANAGED_TOOLS)[keyof typeof MANAGED_TOOLS];
 
 function toolRelease(target: ManagedToolTarget) {
+  if (target === "ffmpeg") {
+    const { linuxX64, ...release } = assets.ffmpeg;
+    // Keep existing receipts valid on platforms whose binaries have not changed.
+    return process.platform === "linux" && process.arch === "x64" ? linuxX64 : release;
+  }
   if (target === "whisper" && process.platform === "linux") return assets.whisper.linux;
   if (target === "whisper" && process.platform === "darwin") return assets.whisper.homebrew;
   if (target === "whisper") {

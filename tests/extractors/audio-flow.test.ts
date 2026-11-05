@@ -102,9 +102,13 @@ const videoInfo = (id: string, url: string) => ({
 });
 
 describe.skipIf(!available)("native audio downloads and local conversion", () => {
-  test.each([false, true])(
-    "fetches HLS fragments concurrently without accepting missing segments (missing: %s)",
-    async (missing) => {
+  test.each([
+    [false, undefined],
+    [true, undefined],
+    [false, 1_000_000],
+  ] as const)(
+    "downloads complete HLS with bounded concurrency (missing: %s, maxBytes: %s)",
+    async (missing, maxBytes) => {
       const f = await fixture();
       await ffmpeg([
         "-f",
@@ -157,9 +161,18 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
         info.duration = 8;
         info.formats[0]!.protocol = "m3u8_native";
         await writeFile(f.metadataPath, JSON.stringify(info));
-        const result = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
-        expect(peak).toBeGreaterThan(1);
-        expect(peak).toBeLessThanOrEqual(4);
+        const result = await f.run(
+          maxBytes === undefined
+            ? ["src/bin.ts", "download", source, "--output", f.output, "--json"]
+            : [
+                "-e",
+                `import {download} from './src/index.ts'; const r = await download(${JSON.stringify(source)}, ${JSON.stringify({ directory: f.output, maxBytes })}); console.log(JSON.stringify(r.json));`,
+              ],
+        );
+        if (maxBytes === undefined) {
+          expect(peak).toBeGreaterThan(1);
+          expect(peak).toBeLessThanOrEqual(4);
+        } else expect(peak).toBe(1);
         if (missing) {
           expect(result.exit).toBe(1);
           expect(result.data.issues[0].code).toBe("DOWNLOAD_FAILED");

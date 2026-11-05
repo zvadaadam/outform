@@ -177,6 +177,23 @@ const SETUP_CONFIGS: Record<SetupTarget, SetupConfig> = {
     command: "ffmpeg",
     purpose: "Enable audio conversion and probing",
     async resolveSteps() {
+      if (process.platform === "linux" && process.arch === "x64") {
+        if ((await hasCommand("ffmpeg")) && (await hasCommand("ffprobe"))) return [];
+        if (isMusl() || !(await hasCommand("tar")) || !(await hasCommand("xz"))) return null;
+        // The older Linux x64 static build crashes when reading MPEG-TS/HLS segments.
+        const release = assets.ffmpeg.linuxX64;
+        return [
+          {
+            kind: "tar",
+            url: release.baseUrl + release.asset,
+            sha256: release.sha256,
+            destination: dirname(toolPath("ffmpeg")),
+            label: `ffmpeg/ffprobe ${release.version}`,
+            directory: release.asset.replace(/\.tar\.xz$/, "/bin"),
+            files: ["ffmpeg", "ffprobe"],
+          },
+        ];
+      }
       const steps: SetupStep[] = [];
       for (const command of ["ffmpeg", "ffprobe"]) {
         if (await hasCommand(command)) continue;
@@ -418,9 +435,9 @@ async function installTar(step: Extract<SetupStep, { kind: "tar" }>): Promise<vo
   await mkdir(step.destination, { recursive: true });
   const dir = await mkdtemp(join(step.destination, ".install-"));
   try {
-    const archive = join(dir, "tool.tar.gz");
+    const archive = join(dir, "tool.tar");
     await downloadFile(step.url, archive, step);
-    await runCommand(["tar", "-xzf", archive, "-C", dir, ...step.files.map((file) => `${step.directory}/${file}`)]);
+    await runCommand(["tar", "-xf", archive, "-C", dir, ...step.files.map((file) => `${step.directory}/${file}`)]);
     // Read every required file before publishing, dereferencing the pinned archive's library symlinks.
     const files = await Promise.all(
       step.files.map(async (file) => ({ file, data: await readFile(join(dir, step.directory, file)) })),

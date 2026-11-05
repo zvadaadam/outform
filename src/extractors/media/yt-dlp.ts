@@ -253,8 +253,8 @@ export async function downloadYtDlpMedia(
       "--abort-on-unavailable-fragments",
       "--fragment-retries",
       "1",
-      "--concurrent-fragments",
-      "4",
+      // A stalled early fragment must not accumulate later fragments beyond a configured byte limit.
+      ...(options.maxBytes === undefined ? ["--concurrent-fragments", "4"] : []),
       "--ffmpeg-location",
       dirname(toolPath("ffmpeg")),
       "--merge-output-format",
