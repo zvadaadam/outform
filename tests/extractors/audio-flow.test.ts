@@ -102,6 +102,84 @@ const videoInfo = (id: string, url: string) => ({
 });
 
 describe.skipIf(!available)("native audio downloads and local conversion", () => {
+  test.each([false, true])(
+    "fetches HLS fragments concurrently without accepting missing segments (missing: %s)",
+    async (missing) => {
+      const f = await fixture();
+      await ffmpeg([
+        "-f",
+        "lavfi",
+        "-i",
+        "color=red:size=64x64:rate=10:duration=8",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=8",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-g",
+        "10",
+        "-sc_threshold",
+        "0",
+        "-c:a",
+        "aac",
+        "-f",
+        "hls",
+        "-hls_time",
+        "1",
+        "-hls_list_size",
+        "0",
+        "-hls_segment_filename",
+        join(f.root, "segment%03d.ts"),
+        join(f.root, "source.m3u8"),
+      ]);
+      let active = 0;
+      let peak = 0;
+      const server = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const name = new URL(request.url).pathname.slice(1);
+          if (name !== "source.m3u8" && !/^segment\d{3}\.ts$/.test(name))
+            return new Response("Not found", { status: 404 });
+          if (name.endsWith(".ts")) {
+            peak = Math.max(peak, ++active);
+            await Bun.sleep(200);
+            active--;
+          }
+          if (missing && name === "segment002.ts") return new Response("Not found", { status: 404 });
+          return new Response(Bun.file(join(f.root, name)));
+        },
+      });
+      try {
+        const info = videoInfo("segmented", new URL("source.m3u8", server.url).href);
+        info.duration = 8;
+        info.formats[0]!.protocol = "m3u8_native";
+        await writeFile(f.metadataPath, JSON.stringify(info));
+        const result = await f.run(["src/bin.ts", "download", source, "--output", f.output, "--json"]);
+        expect(peak).toBeGreaterThan(1);
+        expect(peak).toBeLessThanOrEqual(4);
+        if (missing) {
+          expect(result.exit).toBe(1);
+          expect(result.data.issues[0].code).toBe("DOWNLOAD_FAILED");
+          expect(result.data.media[0].file).toBeNull();
+          expect(await readdir(result.data.directory)).toEqual(["metadata.json"]);
+        } else {
+          expect(result.exit).toBe(0);
+          expect(result.data.issues).toEqual([]);
+          const asset = result.data.media[0];
+          expect(asset.artifact.duration).toBeCloseTo(8, 0);
+          expect(asset.artifact.hasAudio).toBe(true);
+          await ffmpeg(["-xerror", "-i", asset.file, "-f", "null", "-"]);
+        }
+      } finally {
+        server.stop(true);
+      }
+    },
+    30_000,
+  );
+
   test("converts a local video without changing its bytes, then verifies the saved MP3 and manifest", async () => {
     const f = await fixture();
     const input = await generated(f.root);
