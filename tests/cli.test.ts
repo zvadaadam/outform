@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { basename, join } from "path";
 import { createManagedTools } from "./fixtures/tools";
 
 const CLI = [process.execPath, "run", "src/bin.ts"];
@@ -525,11 +525,40 @@ describe("managed setup", () => {
   });
 
   test("whisper plan includes ffmpeg and ffprobe when missing", async () => {
-    const result = await collect(run(["install", "whisper", "--dry-run", "--json"], NO_TOOLS_ENV));
-    const plans = JSON.parse(result.stdout).plans;
-    expect(plans.map((p: any) => p.target)).toEqual(["ffmpeg", "whisper"]);
-    expect(plans[0].steps.map((s: any) => s.label)).toEqual(["ffmpeg b6.1.1", "ffprobe b6.1.1"]);
+    const fakeTools = await createFakeToolPath(["tar", "xz"]);
+    try {
+      const result = await collect(
+        run(["install", "whisper", "--dry-run", "--json"], { ...NO_TOOLS_ENV, PATH: fakeTools.path }),
+      );
+      expect(result.exitCode).toBe(0);
+      const plans = JSON.parse(result.stdout).plans;
+      expect(plans.map((p: any) => p.target)).toEqual(["ffmpeg", "whisper"]);
+      const files = plans[0].steps.flatMap(
+        (step: { files?: string[]; destination: string }) =>
+          step.files ?? [basename(step.destination).replace(/\.exe$/, "")],
+      );
+      expect(files).toEqual(["ffmpeg", "ffprobe"]);
+    } finally {
+      await rm(fakeTools.dir, { recursive: true, force: true });
+    }
   });
+
+  test.skipIf(process.platform !== "linux" || process.arch !== "x64")(
+    "Linux x64 setup explains how to install missing xz",
+    async () => {
+      const fakeTools = await createFakeToolPath(["tar"]);
+      try {
+        const result = await collect(run(["install", "ffmpeg", "--json"], { ...NO_TOOLS_ENV, PATH: fakeTools.dir }));
+        expect(result.exitCode).toBe(1);
+        const report = JSON.parse(result.stdout);
+        expect(report.ready).toBe(false);
+        expect(report.results[0].issue.code).toBe("SETUP_FAILED");
+        expect(report.results[0].issue.message).toContain("sudo apt-get install -y tar xz-utils");
+      } finally {
+        await rm(fakeTools.dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("feedback help and validation never send feedback", async () => {
     const help = await collect(run(["feedback", "--help"]));
