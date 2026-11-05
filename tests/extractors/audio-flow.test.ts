@@ -166,8 +166,8 @@ describe.skipIf(!available)("native audio downloads and local conversion", () =>
           expect(result.data.media[0].file).toBeNull();
           expect(await readdir(result.data.directory)).toEqual(["metadata.json"]);
         } else {
-          expect(result.exit).toBe(0);
           expect(result.data.issues).toEqual([]);
+          expect(result.exit).toBe(0);
           const asset = result.data.media[0];
           expect(asset.artifact.duration).toBeCloseTo(8, 0);
           expect(asset.artifact.hasAudio).toBe(true);
