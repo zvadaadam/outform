@@ -138,6 +138,8 @@ describe.skipIf(!available)("native media exports and local conversion", () => {
         "libx264",
         "-pix_fmt",
         "yuv420p10le",
+        "-vf",
+        `setparams=color_primaries=bt2020:color_trc=${transfer}:colorspace=bt2020nc`,
         "-color_primaries",
         "bt2020",
         "-color_trc",
@@ -146,6 +148,7 @@ describe.skipIf(!available)("native media exports and local conversion", () => {
         "bt2020nc",
         file,
       ]);
+      expect((await streamInfo(file))[0]?.color_transfer).toBe(transfer);
       const server = Bun.serve({ port: 0, fetch: () => new Response(Bun.file(file)) });
       try {
         const info = videoInfo("hdr", server.url.href);
@@ -205,19 +208,31 @@ describe.skipIf(!available)("native media exports and local conversion", () => {
 
       const stalled = await fixture(info, "conversion");
       const proc = stalled.spawn(["src/bin.ts", "download", source, "--output", stalled.output, "--json"]);
-      for (let i = 0; i < 300 && !(await Bun.file(stalled.env.OUTFORM_TEST_READY).exists()); i++) await Bun.sleep(20);
-      expect(await Bun.file(stalled.env.OUTFORM_TEST_READY).exists()).toBe(true);
-      proc.kill("SIGINT");
-      const cancelled = await stalled.collect(proc);
-      expect(cancelled.exit).toBe(130);
-      expect(cancelled.data.issues[0].code).toBe("DOWNLOAD_CANCELLED");
-      expect(await readdir(cancelled.data.directory)).toEqual(["metadata.json"]);
-      await Bun.sleep(2200);
-      expect(await Bun.file(stalled.env.OUTFORM_TEST_ORPHAN).exists()).toBe(false);
+      try {
+        for (
+          let i = 0;
+          i < 1000 && proc.exitCode === null && !(await Bun.file(stalled.env.OUTFORM_TEST_READY).exists());
+          i++
+        )
+          await Bun.sleep(20);
+        expect(await Bun.file(stalled.env.OUTFORM_TEST_READY).exists()).toBe(true);
+        proc.kill("SIGINT");
+        const cancelled = await stalled.collect(proc);
+        expect(cancelled.exit).toBe(130);
+        expect(cancelled.data.issues[0].code).toBe("DOWNLOAD_CANCELLED");
+        expect(await readdir(cancelled.data.directory)).toEqual(["metadata.json"]);
+        await Bun.sleep(2200);
+        expect(await Bun.file(stalled.env.OUTFORM_TEST_ORPHAN).exists()).toBe(false);
+      } finally {
+        if (proc.exitCode === null) {
+          proc.kill("SIGINT");
+          await stalled.collect(proc);
+        }
+      }
     } finally {
       server.stop(true);
     }
-  }, 30_000);
+  }, 45_000);
 
   test.each([
     [false, "mp4"],

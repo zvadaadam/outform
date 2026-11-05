@@ -47,6 +47,8 @@ try {
       "libx264",
       "-pix_fmt",
       "yuv420p10le",
+      "-vf",
+      "setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc",
       "-color_primaries",
       "bt2020",
       "-color_trc",
@@ -59,6 +61,12 @@ try {
     ]),
   );
   assert.equal(generatedVideo.exitCode, 0, generatedVideo.stderr);
+  const inputProbe = await waitForResult(spawn(["ffprobe", "-v", "error", "-show_streams", "-of", "json", video]));
+  assert.equal(inputProbe.exitCode, 0, inputProbe.stderr);
+  assert(
+    JSON.parse(inputProbe.stdout).streams.some((s: { color_transfer: string }) => s.color_transfer === "smpte2084"),
+    inputProbe.stdout,
+  );
   const exported = await convertMediaVideo(
     video,
     directory,
@@ -79,6 +87,7 @@ try {
       (s: { codec_name: string; pix_fmt: string; color_transfer: string }) =>
         s.codec_name === "h264" && s.pix_fmt === "yuv420p" && s.color_transfer === "bt709",
     ),
+    inspected.stdout,
   );
   assert(streams.some((s: { codec_name: string }) => s.codec_name === "aac"));
   const controller = new AbortController();
